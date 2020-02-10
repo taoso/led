@@ -46,9 +46,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func proxySSL(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.(http.Flusher).Flush()
-
 	host := req.RequestURI
 	if strings.LastIndex(host, ":") == -1 {
 		host += ":443"
@@ -59,7 +56,16 @@ func proxySSL(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer upConn.Close()
-	downConn := flushWriter{w:w, r:req.Body}
+
+	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+
+	var downConn io.ReadWriter
+	if req.ProtoMajor == 2 {
+		downConn = flushWriter{w:w, r:req.Body}
+	} else {
+		downConn, _, err = w.(http.Hijacker).Hijack()
+	}
 
 	timeout := 15 * time.Minute
 	go func() {
