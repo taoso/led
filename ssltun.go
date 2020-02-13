@@ -1,13 +1,13 @@
 package ssltun
 
 import (
+	"encoding/base64"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
 	"time"
-	"log"
-	"encoding/base64"
 )
 
 // Proxy http 隧道服务
@@ -62,7 +62,7 @@ func proxySSL(w http.ResponseWriter, req *http.Request) {
 
 	var downConn io.ReadWriter
 	if req.ProtoMajor == 2 {
-		downConn = flushWriter{w:w, r:req.Body}
+		downConn = flushWriter{w: w, r: req.Body}
 	} else {
 		downConn, _, err = w.(http.Hijacker).Hijack()
 	}
@@ -76,7 +76,7 @@ func proxySSL(w http.ResponseWriter, req *http.Request) {
 }
 
 func proxyGet(w http.ResponseWriter, req *http.Request) {
-	url := "http://"+req.Host+req.RequestURI
+	url := "http://" + req.Host + req.RequestURI
 	r, err := http.NewRequest(req.Method, url, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -91,7 +91,14 @@ func proxyGet(w http.ResponseWriter, req *http.Request) {
 	h.Set("Connection", "close")
 	req.Header = h
 
-	resp, err := http.DefaultClient.Do(r)
+	c := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// do not follow redirect response
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := c.Do(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte(err.Error()))
