@@ -1,34 +1,31 @@
 # ssltun
 
-## 简介
+ssltun is a simple secure http proxy server with automic https.
 
-优点很突出，采用标准协议，极其稳定！不需要客户端。
+# quick start
 
-缺点则是性能略差，不支持移动端。而且还需要一个域名！
-
-## 使用
-
-首先安装 ssltun 命令
+Firstly, install the ssltun
 ```
 go get -u -v github.com/lvht/ssltun/cmd/ssltun
 ```
 
-然后注册一个域名。**因是使用了标准 https 所以需要一个域名**。将域名解析到你的服务器IP。
+Secondly, register one domain name.
 
-我们这里假设使用 ssltun.io 作为域名。域名解析生效后启动 ssltun
+Suppose we have a domain ssltun.io. And add an A record to you server ip.
+And then start the ssltun,
 ```
-# 默认使用 http/1.1 + tls 通信。
-# 如果你的服务器网络很稳，可以使用`-h2`选项开启 http/2 通信。
+# http/1.1 + tls is used as default.
+# You can use the `-h2` option to enable http/2
 ssltun -name ssltun.io -key foo
 ```
 
-这里的 `-key` 参数用来指定用户名，别让人猜到。
+The option of `-key` is used for set one username for authentication.
 
-ssltun 启动后会自动联系 letsencrypt 签发证书。
+ssltun will use [letsencrypt]() so sign a https certificate automically。
 
-启动后访问 https://ssltun.io 你会看到**从中国发出的第一封邮件**的内容。
+Then you can browse the http://ssltun.io, you will read
+> Across the Great Wall we can reach every corner in the world.
 
-最后就是设置你的浏览器插件或者系统网络配置。
-协议选`https`，域名填`ssltun.io`，端口填`443`，用户名填`foo`，密码随便写一个。
+Finally, set your system proxy or browser proxy extension using the **HTTPS** protocol.
 
-浏览器插件建议使用[SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega)。
+We recommend to use the [SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega)。
