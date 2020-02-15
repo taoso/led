@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-// Proxy http 隧道服务
+// Proxy http proxy handler
 type Proxy struct {
-	// Name 域名
+	// Name proxy server domain name
 	Name string
-	// Key 使录名
+	// Key http basic authorization username
 	Key string
 }
 
