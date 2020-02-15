@@ -33,7 +33,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodGet {
-		proxyGet(w, req)
+		proxyHTTP(w, req)
 		return
 	}
 
@@ -42,10 +42,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	proxySSL(w, req)
+	proxyHTTPS(w, req)
 }
 
-func proxySSL(w http.ResponseWriter, req *http.Request) {
+func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	host := req.RequestURI
 	if strings.LastIndex(host, ":") == -1 {
 		host += ":443"
@@ -75,9 +75,14 @@ func proxySSL(w http.ResponseWriter, req *http.Request) {
 	iocopy(downConn, upConn, timeout)
 }
 
-func proxyGet(w http.ResponseWriter, req *http.Request) {
-	url := "http://" + req.Host + req.RequestURI
-	r, err := http.NewRequest(req.Method, url, nil)
+func proxyHTTP(w http.ResponseWriter, req *http.Request) {
+	var url string
+	if strings.HasPrefix(req.RequestURI, "http") {
+		url = req.RequestURI
+	} else {
+		url = "http://" + req.Host + req.RequestURI
+	}
+	r, err := http.NewRequest(req.Method, url, req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -88,6 +93,7 @@ func proxyGet(w http.ResponseWriter, req *http.Request) {
 	h.Del("Proxy-Authorization")
 	h.Del("Te")
 	h.Del("TransferEncoding")
+	h.Del("Host")
 	h.Set("Connection", "close")
 	req.Header = h
 
