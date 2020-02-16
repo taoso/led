@@ -15,10 +15,18 @@ type Proxy struct {
 	Name string
 	// Key http basic authorization username
 	Key string
+
+	FileHandler http.Handler
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Host == p.Name {
+		if p.FileHandler != nil {
+			p.FileHandler.ServeHTTP(w, req)
+			return
+		}
+
+		// send default slogan
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte("Across the Great Wall we can reach every corner in the world.\n"))
 		return
@@ -45,11 +53,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
-	host := req.RequestURI
-	if strings.LastIndex(host, ":") == -1 {
-		host += ":443"
-	}
-	upConn, err := net.DialTimeout("tcp", host, 500*time.Millisecond)
+	address := req.RequestURI
+	upConn, err := net.DialTimeout("tcp", address, 500*time.Millisecond)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
