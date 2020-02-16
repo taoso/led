@@ -3,7 +3,6 @@ package ssltun
 import (
 	"encoding/base64"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -67,12 +66,11 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 		downConn, _, err = w.(http.Hijacker).Hijack()
 	}
 
-	timeout := 15 * time.Minute
 	go func() {
-		iocopy(upConn, downConn, timeout)
+		io.Copy(upConn, downConn)
 	}()
 
-	iocopy(downConn, upConn, timeout)
+	io.Copy(downConn, upConn)
 }
 
 func proxyHTTP(w http.ResponseWriter, req *http.Request) {
@@ -159,42 +157,4 @@ func parseBasicAuth(auth string) (username, password string, ok bool) {
 		return
 	}
 	return cs[:s], cs[s+1:], true
-}
-
-func iocopy(dst io.Writer, src io.Reader, timeout time.Duration) {
-	size := 32 * 1024
-	buf := make([]byte, size)
-
-	timer := time.NewTimer(timeout)
-	ch := make(chan bool, 0)
-
-	go func() {
-		defer func() { ch <- true }()
-
-		for {
-			n, err := src.Read(buf)
-			if err != nil {
-				log.Println("read", err)
-				return
-			}
-
-			n, err = dst.Write(buf[:n])
-			if err != nil {
-				log.Println("write", err)
-				return
-			}
-
-			if !timer.Reset(timeout) {
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-ch:
-		log.Println("finished")
-	case <-timer.C:
-		log.Println("timeout")
-	}
-	timer.Stop()
 }
