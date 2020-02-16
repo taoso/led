@@ -10,12 +10,13 @@ import (
 	"github.com/mholt/certmagic"
 )
 
-var name, key string
+var name, key, root string
 var h2 bool
 
 func init() {
 	flag.StringVar(&name, "name", "", "server domain name")
 	flag.StringVar(&key, "key", "", "server auth key")
+	flag.StringVar(&root, "root", "", "static server root")
 	flag.BoolVar(&h2, "h2", false, "enable http/2 protocol")
 }
 
@@ -36,6 +37,10 @@ func main() {
 	}
 
 	proxy := &ssltun.Proxy{Name: name, Key: key}
+	if root != "" {
+		proxy.FileHandler = http.FileServer(http.Dir(root))
+	}
+
 	if err = http.Serve(ln, proxy); err != nil {
 		log.Fatal(err)
 	}
