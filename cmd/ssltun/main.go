@@ -5,9 +5,10 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/lvht/ssltun"
-	"github.com/mholt/certmagic"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var name, key, root string
@@ -23,10 +24,14 @@ func init() {
 func main() {
 	flag.Parse()
 
-	tlsCfg, err := certmagic.TLS([]string{name})
-	if err != nil {
-		log.Fatal(err)
+	dir := os.Getenv("HOME") + "/.autocert"
+	acm := autocert.Manager{
+		Cache:      autocert.DirCache(dir),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(name),
 	}
+	tlsCfg := acm.TLSConfig()
+
 	if !h2 {
 		tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
 	}
