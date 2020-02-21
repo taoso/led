@@ -11,16 +11,16 @@ import (
 
 // Proxy http proxy handler
 type Proxy struct {
-	// Name proxy server domain name
-	Name string
-	// Key http basic authorization username
-	Key string
+	// DomainName proxy server domain name
+	DomainName string
+	// Auth is function to check if username and password is match.
+	Auth func(username, password string) bool
 
 	FileHandler http.Handler
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.Host == p.Name {
+	if req.Host == p.DomainName {
 		if p.FileHandler != nil {
 			p.FileHandler.ServeHTTP(w, req)
 			return
@@ -33,23 +33,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
-	if u, _, _ := parseBasicAuth(auth); u != p.Key {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="`+p.Name+`"`)
+	username, password, _ := parseBasicAuth(auth)
+	if !p.Auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="`+p.DomainName+`"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
 
-	if req.Method == http.MethodGet {
+	if req.Method == http.MethodConnect {
+		proxyHTTPS(w, req)
+	} else {
 		proxyHTTP(w, req)
-		return
 	}
-
-	if req.Method != http.MethodConnect {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	proxyHTTPS(w, req)
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {

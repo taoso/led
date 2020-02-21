@@ -41,7 +41,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	proxy := &ssltun.Proxy{Name: name, Key: key}
+	proxy := &ssltun.Proxy{DomainName: name}
+	proxy.Auth = func(u, p string) bool { return u == key }
 	if root != "" {
 		proxy.FileHandler = http.FileServer(http.Dir(root))
 	}
