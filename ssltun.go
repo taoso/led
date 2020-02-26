@@ -2,11 +2,16 @@ package ssltun
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"io"
+	"log"
 	"net"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/songgao/water"
 )
 
 // Proxy http proxy handler
@@ -41,6 +46,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodConnect {
+		if req.ProtoMajor == 1 && req.RequestURI == "*" {
+			proxyVPN(w, req)
+			return
+		}
 		proxyHTTPS(w, req)
 	} else {
 		proxyHTTP(w, req)
@@ -117,6 +126,62 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+	return
+}
+
+func proxyVPN(w http.ResponseWriter, req *http.Request) (err error) {
+	c, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		c.Write([]byte("hijack faild"))
+		return
+	}
+	defer c.Close()
+
+	tun, err := water.New(water.Config{DeviceType: water.TUN})
+	if err != nil {
+		c.Write([]byte("create tun faild"))
+		return
+	}
+	defer tun.Close()
+
+	hostIP := nextIP()
+	clientIP := nextIP()
+	defer releaseIP(hostIP, clientIP)
+
+	log.Printf("host %s -> %s", hostIP, clientIP)
+
+	args := []string{tun.Name(), hostIP.String(), "pointopoint", clientIP.String(), "up", "mtu", "10240"}
+	if err = exec.Command("/sbin/ifconfig", args...).Run(); err != nil {
+		c.Write([]byte("ifconfig faild"))
+		return
+	}
+
+	if _, err = c.Write(append(clientIP.To4(), hostIP.To4()...)); err != nil {
+		return
+	}
+
+	go func() {
+		buf := make([]byte, 10240)
+		for {
+			if _, err := io.ReadFull(c, buf[:4]); err != nil {
+				log.Println("read ip length error", err)
+				return
+			}
+			l := int(binary.BigEndian.Uint16(buf[2:4]))
+
+			if _, err = io.ReadFull(c, buf[4:l]); err != nil {
+				log.Println("read ip body error", err)
+				return
+			}
+
+			if _, err := tun.Write(buf[:l]); err != nil {
+				log.Println("send ip packet error", err)
+				return
+			}
+		}
+	}()
+
+	io.CopyBuffer(c, tun, make([]byte, 10240))
 	return
 }
 

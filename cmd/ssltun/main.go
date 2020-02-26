@@ -23,6 +23,10 @@ func init() {
 
 func main() {
 	flag.Parse()
+	if name == "" || key == "" {
+		flag.Usage()
+		return
+	}
 
 	dir := os.Getenv("HOME") + "/.autocert"
 	acm := autocert.Manager{
