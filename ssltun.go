@@ -65,14 +65,14 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	}
 	defer upConn.Close()
 
-	w.WriteHeader(http.StatusOK)
-	w.(http.Flusher).Flush()
-
 	var downConn io.ReadWriter
 	if req.ProtoMajor == 2 {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
 		downConn = flushWriter{w: w, r: req.Body}
 	} else {
 		downConn, _, err = w.(http.Hijacker).Hijack()
+		downConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 	}
 
 	go func() {
