@@ -132,14 +132,14 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 func proxyVPN(w http.ResponseWriter, req *http.Request) (err error) {
 	c, _, err := w.(http.Hijacker).Hijack()
 	if err != nil {
-		c.Write([]byte("hijack faild"))
+		log.Println("hijack faild", err)
 		return
 	}
 	defer c.Close()
 
 	tun, err := water.New(water.Config{DeviceType: water.TUN})
 	if err != nil {
-		c.Write([]byte("create tun faild"))
+		log.Println("create tun faild", err)
 		return
 	}
 	defer tun.Close()
@@ -150,9 +150,15 @@ func proxyVPN(w http.ResponseWriter, req *http.Request) (err error) {
 
 	log.Printf("host %s -> %s", hostIP, clientIP)
 
-	args := []string{tun.Name(), hostIP.String(), "pointopoint", clientIP.String(), "up", "mtu", "10240"}
-	if err = exec.Command("/sbin/ifconfig", args...).Run(); err != nil {
-		c.Write([]byte("ifconfig faild"))
+	args := []string{"link", "set", tun.Name(), "up"}
+	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
+		log.Println("link set up", err)
+		return
+	}
+
+	args = []string{"addr", "add", hostIP.String(), "peer", clientIP.String(), "dev", tun.Name()}
+	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
+		log.Println("addr add faild", err)
 		return
 	}
 

@@ -60,9 +60,15 @@ func main() {
 	}
 	defer tun.Close()
 
-	cmd := exec.Command("/sbin/ifconfig", tun.Name(), clientIP, hostIP, "up")
-	if err := cmd.Run(); err != nil {
-		log.Panic(err)
+	args := []string{"link", "set", tun.Name(), "up"}
+	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
+		log.Println("link set up", err)
+		return
+	}
+
+	args = []string{"addr", "add", clientIP, "peer", hostIP, "dev", tun.Name()}
+	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
+		log.Println("addr add faild", err)
 		return
 	}
 
