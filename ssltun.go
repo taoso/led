@@ -167,6 +167,7 @@ func proxyVPN(w http.ResponseWriter, req *http.Request) (err error) {
 	}
 
 	go func() {
+		defer tun.Close()
 		buf := make([]byte, 10240)
 		for {
 			if _, err := io.ReadFull(c, buf[:4]); err != nil {
