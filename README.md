@@ -2,6 +2,8 @@
 
 ssltun is a simple secure http proxy server with automic https.
 
+If you need IP tunnel, you could use https://github.com/lvht/dtun
+
 # quick start
 
 Firstly, install the ssltun
@@ -21,7 +23,7 @@ ssltun -name ssltun.io -key foo
 
 The option of `-key` is used for set one username for authentication.
 
-ssltun will use [letsencrypt]() so sign a https certificate automically。
+ssltun will use https://letsencrypt.org so sign a https certificate automically。
 
 Then you can browse the http://ssltun.io, you will read
 > Across the Great Wall we can reach every corner in the world.
