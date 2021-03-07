@@ -2,16 +2,11 @@ package ssltun
 
 import (
 	"encoding/base64"
-	"encoding/binary"
 	"io"
-	"log"
 	"net"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/songgao/water"
 )
 
 // Proxy http proxy handler
@@ -46,10 +41,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodConnect {
-		if req.ProtoMajor == 1 && req.RequestURI == "*" {
-			proxyVPN(w, req)
-			return
-		}
 		proxyHTTPS(w, req)
 	} else {
 		proxyHTTP(w, req)
@@ -126,69 +117,6 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
-	return
-}
-
-func proxyVPN(w http.ResponseWriter, req *http.Request) (err error) {
-	c, _, err := w.(http.Hijacker).Hijack()
-	if err != nil {
-		log.Println("hijack faild", err)
-		return
-	}
-	defer c.Close()
-
-	tun, err := water.New(water.Config{DeviceType: water.TUN})
-	if err != nil {
-		log.Println("create tun faild", err)
-		return
-	}
-	defer tun.Close()
-
-	hostIP := nextIP()
-	clientIP := nextIP()
-	defer releaseIP(hostIP, clientIP)
-
-	log.Printf("host %s -> %s", hostIP, clientIP)
-
-	args := []string{"link", "set", tun.Name(), "up"}
-	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
-		log.Println("link set up", err)
-		return
-	}
-
-	args = []string{"addr", "add", hostIP.String(), "peer", clientIP.String(), "dev", tun.Name()}
-	if err = exec.Command("/usr/sbin/ip", args...).Run(); err != nil {
-		log.Println("addr add faild", err)
-		return
-	}
-
-	if _, err = c.Write(append(clientIP.To4(), hostIP.To4()...)); err != nil {
-		return
-	}
-
-	go func() {
-		defer tun.Close()
-		buf := make([]byte, 10240)
-		for {
-			if _, err := io.ReadFull(c, buf[:4]); err != nil {
-				log.Println("read ip length error", err)
-				return
-			}
-			l := int(binary.BigEndian.Uint16(buf[2:4]))
-
-			if _, err = io.ReadFull(c, buf[4:l]); err != nil {
-				log.Println("read ip body error", err)
-				return
-			}
-
-			if _, err := tun.Write(buf[:l]); err != nil {
-				log.Println("send ip packet error", err)
-				return
-			}
-		}
-	}()
-
-	io.CopyBuffer(c, tun, make([]byte, 10240))
 	return
 }
 
