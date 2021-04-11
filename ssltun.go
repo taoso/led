@@ -28,6 +28,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		// send default slogan
 		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Add("Alt-Svc", "h3-29=\":4430\"; ma=60")
+		w.Header().Add("Alt-Svc", "h3-32=\":4430\"; ma=60")
+		w.Header().Add("Alt-Svc", "h3-34=\":4430\"; ma=60")
 		w.Write([]byte("Across the Great Wall we can reach every corner in the world.\n"))
 		return
 	}
