@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lvht/ssltun"
@@ -30,11 +32,13 @@ func main() {
 		return
 	}
 
+	names := strings.Split(name, ",")
+
 	dir := os.Getenv("HOME") + "/.autocert"
 	acm := autocert.Manager{
 		Cache:      autocert.DirCache(dir),
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(name),
+		HostPolicy: autocert.HostWhitelist(names...),
 	}
 	tlsCfg := acm.TLSConfig()
 
@@ -47,10 +51,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	proxy := &ssltun.Proxy{DomainName: name}
+	proxy := &ssltun.Proxy{DomainNames: names}
 	proxy.Auth = func(u, p string) bool { return u == key }
 	if root != "" {
-		proxy.FileHandler = http.FileServer(http.Dir(root))
+		proxy.FileHandlers = make(map[string]http.Handler, len(names))
+		for _, name := range names {
+			path := filepath.Join(root, name)
+			proxy.FileHandlers[name] = http.FileServer(http.Dir(path))
+		}
 	}
 
 	go func() {
