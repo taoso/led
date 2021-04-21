@@ -16,14 +16,18 @@ type Proxy struct {
 	// Auth is function to check if username and password is match.
 	Auth func(username, password string) bool
 
-	FileHandler  http.Handler
 	FileHandlers map[string]http.Handler
+
+	AltSvc []string
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, name := range p.DomainNames {
 		if req.Host == name {
 			if h, ok := p.FileHandlers[req.Host]; ok {
+				for _, a := range p.AltSvc {
+					w.Header().Add("Alt-Svc", a)
+				}
 				h.ServeHTTP(w, req)
 				return
 			}
