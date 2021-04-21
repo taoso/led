@@ -11,34 +11,34 @@ import (
 
 // Proxy http proxy handler
 type Proxy struct {
-	// DomainName proxy server domain name
-	DomainName string
+	// DomainNames proxy server domain name
+	DomainNames []string
 	// Auth is function to check if username and password is match.
 	Auth func(username, password string) bool
 
-	FileHandler http.Handler
+	FileHandler  http.Handler
+	FileHandlers map[string]http.Handler
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.Host == p.DomainName {
-		if p.FileHandler != nil {
-			p.FileHandler.ServeHTTP(w, req)
+	for _, name := range p.DomainNames {
+		if req.Host == name {
+			if h, ok := p.FileHandlers[req.Host]; ok {
+				h.ServeHTTP(w, req)
+				return
+			}
+
+			// send default slogan
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("Across the Great Wall we can reach every corner in the world.\n"))
 			return
 		}
-
-		// send default slogan
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Add("Alt-Svc", "h3-29=\":4430\"; ma=60")
-		w.Header().Add("Alt-Svc", "h3-32=\":4430\"; ma=60")
-		w.Header().Add("Alt-Svc", "h3-34=\":4430\"; ma=60")
-		w.Write([]byte("Across the Great Wall we can reach every corner in the world.\n"))
-		return
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
 	username, password, _ := parseBasicAuth(auth)
 	if !p.Auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="`+p.DomainName+`"`)
+		w.Header().Set("Proxy-Authenticate", `Basic realm="word wide web"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
