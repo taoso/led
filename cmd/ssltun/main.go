@@ -69,7 +69,7 @@ func main() {
 		}
 
 		tlsCfg := acm.TLSConfig()
-		tlsCfg.NextProtos = []string{"h3", "h3-29", "h3-32", "h3-34"}
+		tlsCfg.NextProtos = []string{"h3-29", "h3"}
 
 		ln, err := net.ListenPacket("udp", ":"+h3)
 		if err != nil {
@@ -87,7 +87,18 @@ func main() {
 		h3.Serve(ln)
 	}()
 
-	if err = http.Serve(ln, proxy); err != nil {
+	go func() {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			url := "https://" + r.Host + r.RequestURI
+			http.Redirect(w, r, url, http.StatusMovedPermanently)
+		})
+
+		if err := http.ListenAndServe(":80", h); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	if err := http.Serve(ln, proxy); err != nil {
 		log.Fatal(err)
 	}
 }
