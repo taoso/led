@@ -56,10 +56,13 @@ func main() {
 	proxy := &ssltun.Proxy{DomainNames: names}
 	proxy.Auth = func(u, p string) bool { return u == key }
 	if root != "" {
-		proxy.FileHandlers = make(map[string]http.Handler, len(names))
+		proxy.FileHandlers = make(map[string]ssltun.Handler, len(names))
 		for _, name := range names {
 			path := filepath.Join(root, name)
-			proxy.FileHandlers[name] = http.FileServer(http.Dir(path))
+			proxy.FileHandlers[name] = ssltun.Handler{
+				Root:    path,
+				Handler: http.FileServer(http.Dir(path)),
+			}
 		}
 	}
 
@@ -69,7 +72,7 @@ func main() {
 		}
 
 		tlsCfg := acm.TLSConfig()
-		tlsCfg.NextProtos = []string{"h3-29", "h3"}
+		tlsCfg.NextProtos = []string{"h3"}
 
 		ln, err := net.ListenPacket("udp", ":"+h3)
 		if err != nil {

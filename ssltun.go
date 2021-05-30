@@ -5,9 +5,49 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path"
 	"strings"
 	"time"
 )
+
+type Handler struct {
+	Handler http.Handler
+	Root    string
+}
+
+func (h *Handler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
+	b, err := os.ReadFile(path.Join(h.Root, "rewrite.txt"))
+
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return false
+	}
+
+	lines := strings.TrimSpace(string(b))
+	for _, line := range strings.Split(lines, "\n") {
+		parts := strings.Split(line, " -> ")
+
+		if len(parts) < 2 {
+			continue
+		}
+
+		oldURL := parts[0]
+		newURL := parts[1]
+
+		if req.URL.Path == oldURL {
+			http.Redirect(w, req, newURL, http.StatusMovedPermanently)
+			return true
+		}
+	}
+
+	return false
+}
 
 // Proxy http proxy handler
 type Proxy struct {
@@ -16,7 +56,7 @@ type Proxy struct {
 	// Auth is function to check if username and password is match.
 	Auth func(username, password string) bool
 
-	FileHandlers map[string]http.Handler
+	FileHandlers map[string]Handler
 
 	AltSvc []string
 }
@@ -25,10 +65,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, name := range p.DomainNames {
 		if req.Host == name {
 			if h, ok := p.FileHandlers[req.Host]; ok {
+				if h.Rewritten(w, req) {
+					return
+				}
+
 				for _, a := range p.AltSvc {
 					w.Header().Add("Alt-Svc", a)
 				}
-				h.ServeHTTP(w, req)
+				h.Handler.ServeHTTP(w, req)
 				return
 			}
 
