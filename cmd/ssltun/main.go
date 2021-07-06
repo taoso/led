@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gorilla/handlers"
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lvht/ssltun"
 	"golang.org/x/crypto/acme/autocert"
@@ -59,9 +60,12 @@ func main() {
 		proxy.FileHandlers = make(map[string]ssltun.Handler, len(names))
 		for _, name := range names {
 			path := filepath.Join(root, name)
+
+			h := http.FileServer(http.Dir(path))
+			h = handlers.CombinedLoggingHandler(os.Stdout, h)
 			proxy.FileHandlers[name] = ssltun.Handler{
 				Root:    path,
-				Handler: http.FileServer(http.Dir(path)),
+				Handler: h,
 			}
 		}
 	}
