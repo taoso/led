@@ -63,6 +63,7 @@ func main() {
 
 			h := http.FileServer(http.Dir(path))
 			h = handlers.CombinedLoggingHandler(os.Stdout, h)
+			h = handlers.CompressHandler(h)
 			proxy.FileHandlers[name] = ssltun.Handler{
 				Root:    path,
 				Handler: h,
