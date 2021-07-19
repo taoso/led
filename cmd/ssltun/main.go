@@ -100,7 +100,11 @@ func main() {
 			Server:     &http.Server{Handler: h3p},
 			QuicConfig: quicConf,
 		}
-		h3.TLSConfig = tlsCfg
+		cert := tlsCfg.NameToCertificate["taoshu.in"]
+		h3.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{*cert},
+			NextProtos:   []string{"h3-29"},
+		}
 		h3.Serve(ln)
 	}()
 
