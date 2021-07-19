@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -11,7 +12,10 @@ import (
 	"strings"
 
 	"github.com/gorilla/handlers"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lvht/ssltun"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -76,8 +80,12 @@ func main() {
 			return
 		}
 
+		quicConf := &quic.Config{}
+		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
+			return os.Stderr
+		})
+
 		tlsCfg := acm.TLSConfig()
-		tlsCfg.NextProtos = []string{"h3"}
 
 		ln, err := net.ListenPacket("udp", ":"+h3)
 		if err != nil {
@@ -86,11 +94,12 @@ func main() {
 
 		h3p := proxy
 
-		for _, p := range tlsCfg.NextProtos {
-			proxy.AltSvc = append(proxy.AltSvc, p+`=":`+h3+`"`)
-		}
+		proxy.AltSvc = []string{`alt-svc: h3-29=":` + h3 + `"; ma=1`}
 
-		h3 := http3.Server{Server: &http.Server{Handler: h3p}}
+		h3 := http3.Server{
+			Server:     &http.Server{Handler: h3p},
+			QuicConfig: quicConf,
+		}
 		h3.TLSConfig = tlsCfg
 		h3.Serve(ln)
 	}()
