@@ -63,7 +63,7 @@ type Proxy struct {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, name := range p.DomainNames {
-		if req.Host == name {
+		if req.ProtoMajor > 2 || req.Host == name {
 			if h, ok := p.FileHandlers[req.Host]; ok {
 				if h.Rewritten(w, req) {
 					return
