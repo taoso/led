@@ -94,8 +94,6 @@ func main() {
 
 		h3p := proxy
 
-		proxy.AltSvc = []string{`alt-svc: h3-29=":` + h3 + `"; ma=1`}
-
 		h3 := http3.Server{
 			Server:     &http.Server{Handler: h3p},
 			QuicConfig: quicConf,
@@ -103,7 +101,7 @@ func main() {
 		cert, _ := tlsCfg.GetCertificate(&tls.ClientHelloInfo{ServerName: "taoshu.in"})
 		h3.TLSConfig = &tls.Config{
 			Certificates: []tls.Certificate{*cert},
-			NextProtos:   []string{"h3-29"},
+			NextProtos:   []string{"h3-29", "h3"},
 		}
 		h3.Serve(ln)
 	}()
