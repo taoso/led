@@ -7,16 +7,34 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/gorilla/handlers"
+	"golang.org/x/crypto/bcrypt"
 )
 
-type Handler struct {
-	Handler http.Handler
-	Root    string
+type FileHandler struct {
+	Root string
+	fs   http.Handler
 }
 
-func (h *Handler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
+func NewHandler(root string, name string) *FileHandler {
+	path := filepath.Join(root, name)
+
+	h := http.FileServer(http.Dir(path))
+	h = handlers.CombinedLoggingHandler(os.Stdout, h)
+	h = handlers.CompressHandler(h)
+
+	return &FileHandler{
+		Root: path,
+		fs:   h,
+	}
+}
+
+func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 	b, err := os.ReadFile(path.Join(h.Root, "rewrite.txt"))
 
 	if os.IsNotExist(err) {
@@ -51,45 +69,64 @@ func (h *Handler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 
 // Proxy http proxy handler
 type Proxy struct {
-	// DomainNames proxy server domain name
-	DomainNames []string
-	// Auth is function to check if username and password is match.
-	Auth func(username, password string) bool
+	sites atomic.Value
+	users atomic.Value
+}
 
-	FileHandlers map[string]Handler
+func (p *Proxy) auth(username, password string) bool {
+	users := p.users.Load().(map[string]string)
+	hash, ok := users[username]
+	if !ok {
+		return false
+	}
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
 
-	AltSvc []string
+func (p *Proxy) SetUsers(users map[string]string) {
+	p.users.Store(users)
+}
+
+func (p *Proxy) SetSites(root string, sites map[string]string) {
+	hs := make(map[string]*FileHandler, len(sites))
+	for name := range sites {
+		path := filepath.Join(root, name)
+
+		h := http.FileServer(http.Dir(path))
+		h = handlers.CombinedLoggingHandler(os.Stdout, h)
+		h = handlers.CompressHandler(h)
+
+		hs[name] = &FileHandler{
+			Root: path,
+			fs:   h,
+		}
+	}
+
+	p.sites.Store(hs)
+}
+
+func (p *Proxy) host(req *http.Request) string {
+	host := req.Host
+	if i := strings.Index(host, ":"); i > 0 {
+		host = host[:i]
+	}
+	return host
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	for _, name := range p.DomainNames {
-		host := req.Host
-		if i := strings.Index(host, ":"); i > 0 {
-			host = host[:i]
-		}
-		if host == name {
-			if h, ok := p.FileHandlers[host]; ok {
-				if h.Rewritten(w, req) {
-					return
-				}
-
-				for _, a := range p.AltSvc {
-					w.Header().Add("Alt-Svc", a)
-				}
-				h.Handler.ServeHTTP(w, req)
-				return
-			}
-
-			// send default slogan
-			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte("Across the Great Wall we can reach every corner in the world.\n"))
+	fs := p.sites.Load().(map[string]*FileHandler)
+	if f := fs[p.host(req)]; f != nil {
+		if f.Rewritten(w, req) {
 			return
 		}
+
+		f.fs.ServeHTTP(w, req)
+		return
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
 	username, password, _ := parseBasicAuth(auth)
-	if !p.Auth(username, password) {
+	if !p.auth(username, password) {
 		w.Header().Set("Proxy-Authenticate", `Basic realm="word wide web"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return

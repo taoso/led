@@ -2,7 +2,7 @@
 
 ssltun is a simple secure http proxy server with automic https.
 
-If you need IP tunnel, you could use https://github.com/lvht/dtun
+If you need IP tunnel, you could use https://github.com/epii1/dtun
 
 # quick start
 
@@ -13,21 +13,39 @@ go get -u -v github.com/lvht/ssltun/cmd/ssltun
 
 Secondly, register one domain name.
 
-Suppose we have a domain ssltun.io. And add an A record to you server ip.
+Suppose you have a domain named ssltun.io. Your need to add an A record.
+
+And then create a text file named sites.txt with the following content
+
+```
+ssltun.io:
+```
+
+And then create a text file named users.txt with the following content
+
+```
+name:passwrd
+```
+
+The password need to be encrypted by bcrypt. You can use the htpasswd:
+
+```
+htpasswd -B -c ./users.txt foo
+```
+
 And then start the ssltun,
 ```
-# http/1.1 + tls is used as default.
-# You can use the `-h2` option to enable http/2
-ssltun -name ssltun.io -key foo
+sudo ./ssltun -root /tmp -sites sites.txt -users users.txt
 ```
 
-The option of `-key` is used for set one username for authentication.
+The option of `-root` is used for set static sites root dir.
 
-ssltun will use https://letsencrypt.org so sign a https certificate automically。
+All file in /tmp/ssltun.io/ will be published to the Internet.
 
-Then you can browse the http://ssltun.io, you will read
-> Across the Great Wall we can reach every corner in the world.
+ssltun uses https://letsencrypt.org so sign a https certificate automically.
 
 Finally, set your system proxy or browser proxy extension using the **HTTPS** protocol.
 
 We recommend to use the [SwitchyOmega](https://github.com/FelisCatus/SwitchyOmega)。
+
+ssltun will listen on 80/443 tcp port and 443 udp port for h3.

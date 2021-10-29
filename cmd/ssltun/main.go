@@ -1,123 +1,178 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
-	"io"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
-	"github.com/gorilla/handlers"
-	"github.com/lucas-clemente/quic-go"
+	"github.com/fsnotify/fsnotify"
 	"github.com/lucas-clemente/quic-go/http3"
-	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lvht/ssltun"
 	"golang.org/x/crypto/acme/autocert"
 )
 
-var name, key, root string
-var h2 bool
-var h3 string
+var root, sites, users string
 
 func init() {
-	flag.StringVar(&name, "name", "", "server domain name")
-	flag.StringVar(&key, "key", "", "server auth key")
 	flag.StringVar(&root, "root", "", "static server root")
-	flag.StringVar(&h3, "h3", "", "h3 listen port")
-	flag.BoolVar(&h2, "h2", false, "enable http/2 protocol")
+	flag.StringVar(&sites, "sites", "", "static server sites")
+	flag.StringVar(&users, "users", "", "proxy server users")
+}
+
+func watchload(path string, fn func(map[string]string)) {
+	w, ch := watch(path)
+	defer w.Close()
+	defer close(ch)
+load:
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	kv := map[string]string{}
+	for s.Scan() {
+		l := s.Text()
+		i := strings.Index(l, ":")
+		if i == -1 {
+			i = len(l)
+		}
+
+		host := l[:i]
+		kv[host] = l[i+1:]
+	}
+
+	fn(kv)
+
+	for range ch {
+		goto load
+	}
+}
+
+func listen() (ln80, ln443 net.Listener, lnUDP net.PacketConn, err error) {
+	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
+		f1 := os.NewFile(3, "http port from systemd")
+		ln80, err = net.FileListener(f1)
+		if err != nil {
+			return
+		}
+		f2 := os.NewFile(4, "https port from systemd")
+		ln443, err = net.FileListener(f2)
+		if err != nil {
+			return
+		}
+		f3 := os.NewFile(5, "quic port from systemd")
+		lnUDP, err = net.FilePacketConn(f3)
+	} else {
+		ln80, err = net.Listen("tcp", ":80")
+		if err != nil {
+			return
+		}
+		ln443, err = net.Listen("tcp", ":443")
+		if err != nil {
+			return
+		}
+		lnUDP, err = net.ListenPacket("udp", ":443")
+	}
+	return
 }
 
 func main() {
 	flag.Parse()
-	if name == "" || key == "" {
+	if users == "" {
 		flag.Usage()
 		return
 	}
 
-	names := strings.Split(name, ",")
+	proxy := &ssltun.Proxy{}
+
+	var names atomic.Value
+	go watchload(users, proxy.SetUsers)
+	go watchload(sites, func(s map[string]string) {
+		names.Store(s)
+		proxy.SetSites(root, s)
+	})
 
 	dir := os.Getenv("HOME") + "/.autocert"
 	acm := autocert.Manager{
-		Cache:      autocert.DirCache(dir),
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(names...),
+		Cache:  autocert.DirCache(dir),
+		Prompt: autocert.AcceptTOS,
+		HostPolicy: func(ctx context.Context, host string) error {
+			sites := names.Load().(map[string]string)
+			_, ok := sites[host]
+			if ok {
+				return nil
+			} else {
+				return errors.New(host + " not found")
+			}
+		},
 	}
+
 	tlsCfg := acm.TLSConfig()
+	tlsCfg.NextProtos = []string{"acme-tls/1", "http/1.1", "h3", "h3-29"}
 
-	if !h2 {
-		tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
+	ln80, ln443, lnUDP, err := listen()
+	if err != nil {
+		panic(err)
 	}
 
-	ln, err := tls.Listen("tcp", ":443", tlsCfg)
+	// http3
+	h3 := http3.Server{Server: &http.Server{Handler: proxy}}
+	h3.TLSConfig = tlsCfg
+	go h3.Serve(lnUDP.(net.PacketConn))
+
+	// http -> https
+	h301 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		url := "https://" + r.Host + r.RequestURI
+		http.Redirect(w, r, url, http.StatusMovedPermanently)
+	})
+	go http.Serve(ln80, h301)
+
+	// https
+	lnTLS := tls.NewListener(ln443, tlsCfg)
+	http.Serve(lnTLS, proxy)
+}
+
+func watch(path string) (watcher *fsnotify.Watcher, ch chan interface{}) {
+	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	proxy := &ssltun.Proxy{DomainNames: names}
-	proxy.Auth = func(u, p string) bool { return u == key }
-	if root != "" {
-		proxy.FileHandlers = make(map[string]ssltun.Handler, len(names))
-		for _, name := range names {
-			path := filepath.Join(root, name)
-
-			h := http.FileServer(http.Dir(path))
-			h = handlers.CombinedLoggingHandler(os.Stdout, h)
-			h = handlers.CompressHandler(h)
-			proxy.FileHandlers[name] = ssltun.Handler{
-				Root:    path,
-				Handler: h,
-			}
-		}
-	}
-
-	go func() {
-		if h3 == "" {
-			return
-		}
-
-		quicConf := &quic.Config{}
-		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
-			return os.Stderr
-		})
-
-		tlsCfg := acm.TLSConfig()
-
-		ln, err := net.ListenPacket("udp", ":"+h3)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		h3p := proxy
-
-		h3 := http3.Server{
-			Server:     &http.Server{Handler: h3p},
-			QuicConfig: quicConf,
-		}
-		cert, _ := tlsCfg.GetCertificate(&tls.ClientHelloInfo{ServerName: "taoshu.in"})
-		h3.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{*cert},
-			NextProtos:   []string{"h3-29", "h3"},
-		}
-		h3.Serve(ln)
-	}()
-
-	go func() {
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			url := "https://" + r.Host + r.RequestURI
-			http.Redirect(w, r, url, http.StatusMovedPermanently)
-		})
-
-		if err := http.ListenAndServe(":80", h); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	if err := http.Serve(ln, proxy); err != nil {
+	err = watcher.Add(path)
+	if err != nil {
 		log.Fatal(err)
 	}
+	ch = make(chan interface{}, 1)
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					ch <- "read"
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				fmt.Println(err)
+			}
+		}
+	}()
+	return
 }
