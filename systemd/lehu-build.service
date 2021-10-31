@@ -1,0 +1,16 @@
+[Unit]
+Description=lehu build
+After=network.target
+Requires=syncthing@st.service
+
+[Service]
+Environment=PATH=/home/st/lehu-sh:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/usr/local/etc/lehu/env
+ExecStart=/home/st/site.sh
+User=st
+Group=st
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
