@@ -62,18 +62,23 @@ load:
 
 func listen() (ln80, ln443 net.Listener, lnUDP net.PacketConn, err error) {
 	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
-		f1 := os.NewFile(3, "http port from systemd")
-		ln80, err = net.FileListener(f1)
-		if err != nil {
-			return
+		if os.Getenv("LISTEN_FDS") != "3" {
+			panic("LISTEN_FDS should be 3")
 		}
-		f2 := os.NewFile(4, "https port from systemd")
-		ln443, err = net.FileListener(f2)
-		if err != nil {
-			return
+		names := strings.Split(os.Getenv("LISTEN_FDNAMES"), ":")
+		for i, name := range names {
+			switch name {
+			case "http":
+				f1 := os.NewFile(uintptr(i+3), "http port")
+				ln80, err = net.FileListener(f1)
+			case "https":
+				f2 := os.NewFile(uintptr(i+3), "https port")
+				ln443, err = net.FileListener(f2)
+			case "quic":
+				f3 := os.NewFile(uintptr(i+3), "quic port")
+				lnUDP, err = net.FilePacketConn(f3)
+			}
 		}
-		f3 := os.NewFile(5, "quic port from systemd")
-		lnUDP, err = net.FilePacketConn(f3)
 	} else {
 		ln80, err = net.Listen("tcp", ":80")
 		if err != nil {
