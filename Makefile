@@ -1,7 +1,7 @@
 MDs := $(shell find . -name '*.md')
 HTMLs := $(MDs:.md=.html)
 
-%.html: %.md article.tpl Makefile
+%.html: %.md ./head.tpl ./article.tpl
 	pandoc -s -p --highlight-style=pygments \
 		--template article.tpl $< -o $@
 
