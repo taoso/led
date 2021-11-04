@@ -43,7 +43,7 @@ func (s *imapReply) Comment(name, email, path, subject, content string) error {
 		From(name, email).
 		To("", s.Account).
 		Subject(subject).
-		Header("In-Reply-To", strings.Replace(path+email, "/", "", -1)).
+		Header("In-Reply-To", strings.Replace(path+s.Account, "/", "", -1)).
 		Header("Message-ID", time.Now().Format(time.RFC3339Nano)+email).
 		Text([]byte(content))
 
