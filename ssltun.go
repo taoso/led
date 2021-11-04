@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -71,6 +72,7 @@ func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 type Proxy struct {
 	sites atomic.Value
 	users atomic.Value
+	Mail  chan url.Values
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -116,6 +118,17 @@ func (p *Proxy) host(req *http.Request) string {
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
+		if req.RequestURI == "/+/mail" {
+			if err := req.ParseForm(); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			req.Form.Set("path", req.Header.Get("Referer"))
+			p.Mail <- req.Form
+			return
+		}
+
 		if f.Rewritten(w, req) {
 			return
 		}
