@@ -22,11 +22,13 @@ import (
 )
 
 var root, sites, users string
+var imap bool
 
 func init() {
 	flag.StringVar(&root, "root", "", "static server root")
 	flag.StringVar(&sites, "sites", "", "static server sites")
 	flag.StringVar(&users, "users", "", "proxy server users")
+	flag.BoolVar(&imap, "imap", false, "start mail forwarding")
 }
 
 func watchload(path string, fn func(map[string]string)) {
@@ -101,6 +103,10 @@ func main() {
 	}
 
 	proxy := &ssltun.Proxy{}
+
+	if imap {
+		proxy.Mail = startImap()
+	}
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
