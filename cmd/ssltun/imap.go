@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"log"
-	"net/mail"
 	"net/url"
 	"os"
 	"strings"
@@ -31,13 +30,10 @@ func (s *imapReply) Dial() (err error) {
 
 func (s *imapReply) Comment(name, email, path, subject, content string) error {
 	if email == "" {
+		if name == "" {
+			name = "无名氏"
+		}
 		email = "noreply@example.com"
-	}
-	if name == "" {
-		name = "无名氏"
-	}
-	if _, err := mail.ParseAddress(email); err != nil {
-		return nil
 	}
 
 	if subject == "" || content == "" {
