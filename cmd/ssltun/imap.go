@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -70,6 +69,7 @@ func startImap() chan url.Values {
 
 	go func() {
 		for c := range ch {
+		retry:
 			if err := ic.Comment(
 				c.Get("name"),
 				c.Get("email"),
@@ -77,11 +77,11 @@ func startImap() chan url.Values {
 				c.Get("subject"),
 				c.Get("content"),
 			); err != nil {
-				log.Println("comment error", err)
 				time.Sleep(3 * time.Second)
 				if err := ic.Dial(); err != nil {
 					panic(err)
 				}
+				goto retry
 			}
 		}
 	}()
