@@ -2,7 +2,7 @@ MDs := $(shell find . -name '*.md')
 HTMLs := $(MDs:.md=.html)
 
 %.html: %.md ./head.tpl ./article.tpl
-	pandoc -s -p --highlight-style=pygments \
+	pandoc -s -p --from gfm --highlight-style=pygments \
 		--template article.tpl $< -o $@
 
 all: $(HTMLs)
