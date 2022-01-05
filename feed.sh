@@ -20,7 +20,7 @@ cat << EOF
 EOF
 
 # - {"path":"/go/monkey.html","title":"Go语言实现猴子补丁","date":"2021-08-28"}
-grep '^- {"path":' $1/index.yaml | head -n 10 | while read line;
+grep '^- {"path":' $1/index.yaml | while read line;
 do
 	path=$(echo $line|cut -d\" -f4)
 	link="$site_url$path"
