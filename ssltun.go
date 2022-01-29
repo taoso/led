@@ -133,6 +133,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if strings.HasSuffix(req.URL.Path, ".md") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
 		f.fs.ServeHTTP(w, req)
 		return
 	}
