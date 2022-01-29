@@ -118,7 +118,7 @@ func (p *Proxy) host(req *http.Request) string {
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
-		if req.RequestURI == "/+/mail" {
+		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
 			if err := req.ParseForm(); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte(err.Error()))
