@@ -11,3 +11,4 @@ ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 all: $(HTMLs)
 	find . -type d ! -path '*.assets' -exec index.sh {} \;
 	feed.sh . > feed.xml
+	map.sh . > map.xml
