@@ -2,15 +2,18 @@
 
 # 生成 sitemap 文件
 
+source ./env
+
 cat << EOF
 <?xml version="1.0" encoding="utf-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 EOF
 
-for md in $(find $1 -name '*.md'); do
-	path=${md//.md/.html}
-	link="https://taoshu.in${path#.}"
-	updated=`date -u +"%Y-%m-%dT%H:%M:%SZ" -r $path`
+# - {"path":"/go/monkey.html","title":"Go语言实现猴子补丁","date":"2021-08-28"}
+grep '^- {"path":' $1/index.yaml | while read line; do
+	path=$(echo $line|cut -d\" -f4)
+	link="$site_url$path"
+	updated=`date -u +"%Y-%m-%dT%H:%M:%SZ" -r $1$path`
 
 	cat << EOF
   <url>
