@@ -25,7 +25,7 @@ type FileHandler struct {
 func NewHandler(root string, name string) *FileHandler {
 	path := filepath.Join(root, name)
 
-	h := http.FileServer(http.Dir(path))
+	h := http.FileServer(indexDir{http.Dir(path)})
 	h = handlers.CombinedLoggingHandler(os.Stdout, h)
 	h = handlers.CompressHandler(h)
 
@@ -94,7 +94,7 @@ func (p *Proxy) SetSites(root string, sites map[string]string) {
 	for name := range sites {
 		path := filepath.Join(root, name)
 
-		h := http.FileServer(http.Dir(path))
+		h := http.FileServer(indexDir{http.Dir(path)})
 		h = handlers.CombinedLoggingHandler(os.Stdout, h)
 		h = handlers.CompressHandler(h)
 
@@ -228,6 +228,31 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 	return
+}
+
+type indexDir struct {
+	fs http.FileSystem
+}
+
+func (d indexDir) Open(path string) (http.File, error) {
+	f, err := d.fs.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := f.Stat()
+	if s.IsDir() {
+		index := filepath.Join(path, "index.html")
+		if _, err := d.fs.Open(index); err != nil {
+			if err := f.Close(); err != nil {
+				return nil, err
+			}
+
+			return nil, err
+		}
+	}
+
+	return f, nil
 }
 
 type flushWriter struct {
