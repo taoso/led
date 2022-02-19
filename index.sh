@@ -10,7 +10,8 @@ diff <(ls $1/*.md|sed -E 's/\.md/.html/') <(ls $1/*.html) | \
 
 source ./env
 
-echo "site_title: $site_title" > $1/index.yaml
+echo "title: $site_title" > $1/index.yaml
+echo "site_title: $site_title" >> $1/index.yaml
 echo "site_url: $site_url" >> $1/index.yaml
 echo "author_name: $author_name" >> $1/index.yaml
 echo "author_email: $author_email" >> $1/index.yaml
