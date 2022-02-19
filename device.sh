@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+device_id=$1
+sites=/usr/local/etc/lehu/sites.txt
+syncs=/home/st/sync
+
+grep $device_id $sites | cut -d: -f1 | \
+while read domain; do
+        curl -s -H x-api-key:$api_key $host/rest/config/devices -d '{"deviceID":"'$device_id'"}'
+	folder=/home/st/sync/$domain
+	if [[ ! -d $folder ]]; then
+		echo "init folder"
+		cp -R /home/st/sync/lehu.in $folder
+	fi
+
+	cat << EOF | curl -s -X PUT -H x-api-key:$api_key $host/rest/config/folders/$domain -d @-
+	{
+	  "id": "$domain",
+	  "path": "$folder",
+	  "type": "sendreceive",
+	  "devices": [{
+	    "deviceID": "$device_id"
+	  }],
+	  "fsWatcherEnabled": true,
+	  "fsWatcherDelayS": 1
+	}
+EOF
+done
