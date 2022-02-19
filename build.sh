@@ -12,7 +12,7 @@ site=$1
 rsync -a --delete --exclude='.*' --exclude='*.html' ~/sync/$site/ ~/www/$site/
 
 cd ~/www/$site/
-make -f ~/lehu-sh/Makefile
+make -f ~/lehu-sh/Makefile all
 cp ~/sync/$site/*.html ~/www/$site/ 2>/dev/null
 
 # 清理 sync 中已经删除的文件夹
