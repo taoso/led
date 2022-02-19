@@ -4,13 +4,21 @@ trap exit SIGINT SIGTERM
 
 since=0
 
-while true; do
-        curl -s -H x-api-key:$api_key $host/rest/events?since=$since |\
-                jq '.[]|"\(.id),\(.type),\(.data.folder)"' |\
-                sed 's/"//g' > /tmp/events.txt
+# 首次启动跳过已经发生的事件
+curl -s -H x-api-key:$api_key $host/rest/events?timeout=0 > /tmp/events.txt
+last=$(jq -r '.[]|.id' /tmp/events.txt | tail -n 1)
+if [[ ! -z "$last" ]]; then
+	since=$last
+fi
 
-        if [[ -s /tmp/events.txt ]]; then
-                since=$(tail -n 1 /tmp/events.txt | cut -d, -f1)
-        fi
-        grep FolderCompletion /tmp/events.txt| cut -d, -f3 | sort | uniq | xargs -I % build.sh %
+while true; do
+        curl -s -H x-api-key:$api_key $host/rest/events?since=$since > /tmp/events.txt
+
+	jq -r '.[]|select(.type == "PendingDevicesChanged")|.data.added[0].deviceID|select(.!=null)' /tmp/events.txt | sort | uniq | xargs -I % device.sh %
+	jq -r '.[]|select(.type == "FolderCompletion")|.data.folder' /tmp/events.txt | sort | uniq | xargs -I % build.sh %
+
+	last=$(jq -r '.[]|.id' /tmp/events.txt | tail -n 1)
+	if [[ ! -z "$last" ]]; then
+		since=$last
+	fi
 done
