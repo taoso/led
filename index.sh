@@ -2,7 +2,7 @@
 
 # 为所有文章生成 index.html 文件
 
-diff <(ls $1/*.md|sed -E 's/\.md/.html/') <(ls $1/*.html) | \
+diff <(ls $1/*.md 2>/dev/null|sed -E 's/\.md/.html/') <(ls $1/*.html 2>/dev/null) | \
 	grep '>' | \
 	grep -v 'index.html' | \
 	awk '{print $2}' | \
@@ -20,4 +20,4 @@ find $1 -name '*.md' -exec meta.sh {} \; | \
 	sort -r |
 	awk -F, '{print "- {\"path\":\""$2"\",\"title\":\""$3"\",\"date\":\""$1"\"}"}' >> $1/index.yaml
 
-pandoc -s -p --template index.tpl --metadata-file=$1/index.yaml -o $1/index.html /dev/null
+pandoc -s -p -f markdown --template index.tpl --metadata-file=$1/index.yaml -o $1/index.html /dev/null
