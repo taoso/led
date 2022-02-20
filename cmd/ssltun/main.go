@@ -24,11 +24,18 @@ import (
 var root, sites, users string
 var imap bool
 
+var flags struct {
+	http1, http2, http3 string
+}
+
 func init() {
 	flag.StringVar(&root, "root", "", "static server root")
 	flag.StringVar(&sites, "sites", "", "static server sites")
 	flag.StringVar(&users, "users", "", "proxy server users")
 	flag.BoolVar(&imap, "imap", false, "start mail forwarding")
+	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
+	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
+	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
 }
 
 func watchload(path string, fn func(map[string]string)) {
@@ -62,7 +69,7 @@ load:
 	}
 }
 
-func listen() (ln80, ln443 net.Listener, lnUDP net.PacketConn, err error) {
+func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
 		if os.Getenv("LISTEN_FDS") != "3" {
 			panic("LISTEN_FDS should be 3")
@@ -72,32 +79,38 @@ func listen() (ln80, ln443 net.Listener, lnUDP net.PacketConn, err error) {
 			switch name {
 			case "http":
 				f1 := os.NewFile(uintptr(i+3), "http port")
-				ln80, err = net.FileListener(f1)
+				h1, err = net.FileListener(f1)
 			case "https":
 				f2 := os.NewFile(uintptr(i+3), "https port")
-				ln443, err = net.FileListener(f2)
+				h2, err = net.FileListener(f2)
 			case "quic":
 				f3 := os.NewFile(uintptr(i+3), "quic port")
-				lnUDP, err = net.FilePacketConn(f3)
+				h3, err = net.FilePacketConn(f3)
 			}
 		}
 	} else {
-		ln80, err = net.Listen("tcp", ":80")
-		if err != nil {
-			return
+		if flags.http1 != "" {
+			h1, err = net.Listen("tcp", flags.http1)
+			if err != nil {
+				return
+			}
 		}
-		ln443, err = net.Listen("tcp", ":443")
-		if err != nil {
-			return
+		if flags.http2 != "" {
+			h2, err = net.Listen("tcp", flags.http2)
+			if err != nil {
+				return
+			}
 		}
-		lnUDP, err = net.ListenPacket("udp", ":443")
+		if flags.http3 != "" {
+			h3, err = net.ListenPacket("udp", flags.http3)
+		}
 	}
 	return
 }
 
 func main() {
 	flag.Parse()
-	if users == "" {
+	if flags.http1 == "" && flags.http2 == "" {
 		flag.Usage()
 		return
 	}
@@ -115,43 +128,50 @@ func main() {
 		proxy.SetSites(root, s)
 	})
 
-	dir := os.Getenv("HOME") + "/.autocert"
-	acm := autocert.Manager{
-		Cache:  autocert.DirCache(dir),
-		Prompt: autocert.AcceptTOS,
-		HostPolicy: func(ctx context.Context, host string) error {
-			sites := names.Load().(map[string]string)
-			_, ok := sites[host]
-			if ok {
-				return nil
-			} else {
-				return errors.New(host + " not found")
-			}
-		},
-	}
-
-	tlsCfg := acm.TLSConfig()
-	tlsCfg.NextProtos = []string{"acme-tls/1", "http/1.1", "h3", "h3-29"}
-
-	ln80, ln443, lnUDP, err := listen()
+	lnH1, lnH2, lnH3, err := listen()
 	if err != nil {
 		panic(err)
 	}
 
-	// http3
-	h3 := http3.Server{Server: &http.Server{Handler: proxy}}
-	h3.TLSConfig = tlsCfg
-	go h3.Serve(lnUDP.(net.PacketConn))
+	var tlsCfg *tls.Config
+	if lnH2 != nil || lnH3 != nil {
+		dir := os.Getenv("HOME") + "/.autocert"
+		acm := autocert.Manager{
+			Cache:  autocert.DirCache(dir),
+			Prompt: autocert.AcceptTOS,
+			HostPolicy: func(ctx context.Context, host string) error {
+				sites := names.Load().(map[string]string)
+				if _, ok := sites[host]; !ok {
+					return errors.New(host + " not found")
+				}
+				return nil
+			},
+		}
+
+		tlsCfg = acm.TLSConfig()
+		tlsCfg.NextProtos = []string{"acme-tls/1", "http/1.1", "h3", "h3-29"}
+	}
+
+	if lnH3 != nil {
+		h3 := http3.Server{Server: &http.Server{Handler: proxy}}
+		h3.TLSConfig = tlsCfg
+		go h3.Serve(lnH3.(net.PacketConn))
+	}
+
+	if lnH2 == nil {
+		http.Serve(lnH1, proxy)
+		return
+	}
 
 	// http -> https
 	h301 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		url := "https://" + r.Host + r.RequestURI
 		http.Redirect(w, r, url, http.StatusMovedPermanently)
 	})
-	go http.Serve(ln80, h301)
+	go http.Serve(lnH1, h301)
 
 	// https
-	lnTLS := tls.NewListener(ln443, tlsCfg)
+	lnTLS := tls.NewListener(lnH2, tlsCfg)
 	http.Serve(lnTLS, proxy)
 }
 
