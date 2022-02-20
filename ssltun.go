@@ -1,11 +1,11 @@
 package ssltun
 
 import (
+	"bytes"
 	"encoding/base64"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,7 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/emersion/go-imap/client"
 	"github.com/gorilla/handlers"
+	"github.com/jhillyerd/enmime"
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -72,7 +75,6 @@ func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 type Proxy struct {
 	sites atomic.Value
 	users atomic.Value
-	Mail  chan url.Values
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -119,13 +121,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
 		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
-			if err := req.ParseForm(); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			req.Form.Set("path", req.Header.Get("Referer"))
-			p.Mail <- req.Form
+			f.Comment(w, req)
 			return
 		}
 
@@ -133,7 +129,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasSuffix(req.URL.Path, ".md") {
+		path := req.URL.Path
+		if path == "/env" || strings.HasSuffix(path, ".md") {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -155,6 +152,45 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else {
 		proxyHTTP(w, req)
 	}
+}
+
+func (f *FileHandler) Comment(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	envs, err := godotenv.Read(filepath.Join(f.Root, "env"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if envs["IMAP_PASSWORD"] == "" {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	r := imapReply{
+		Host:     envs["IMAP_HOST"],
+		Account:  envs["IMAP_ACCOUNT"],
+		Password: envs["IMAP_PASSWORD"],
+	}
+
+	if err := r.Comment(
+		req.Form.Get("name"),
+		req.Form.Get("email"),
+		req.Form.Get("subject"),
+		req.Form.Get("content"),
+		req.Header.Get("referer"),
+	); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+	return
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
@@ -292,4 +328,37 @@ func parseBasicAuth(auth string) (username, password string, ok bool) {
 		return
 	}
 	return cs[:s], cs[s+1:], true
+}
+
+type imapReply struct {
+	Host     string
+	Account  string
+	Password string
+}
+
+func (s *imapReply) Comment(name, email, subject, content, path string) error {
+	content += "\n\n" + path
+	m := enmime.Builder().
+		From(name, email).
+		To("", s.Account).
+		Subject(subject).
+		Header("In-Reply-To", strings.Replace(path+s.Account, "/", "", -1)).
+		Header("Message-ID", time.Now().Format(time.RFC3339Nano)+email).
+		Text([]byte(content))
+
+	return m.Send(s)
+}
+
+func (s *imapReply) Send(_ string, _ []string, msg []byte) error {
+	c, err := client.DialTLS(s.Host, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Login(s.Account, s.Password); err != nil {
+		return err
+	}
+
+	b := bytes.NewBuffer(msg)
+	return c.Append("INBOX", nil, time.Now(), b)
 }

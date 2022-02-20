@@ -22,7 +22,6 @@ import (
 )
 
 var root, sites, users string
-var imap bool
 
 var flags struct {
 	http1, http2, http3 string
@@ -32,7 +31,6 @@ func init() {
 	flag.StringVar(&root, "root", "", "static server root")
 	flag.StringVar(&sites, "sites", "", "static server sites")
 	flag.StringVar(&users, "users", "", "proxy server users")
-	flag.BoolVar(&imap, "imap", false, "start mail forwarding")
 	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
 	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
 	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
@@ -116,10 +114,6 @@ func main() {
 	}
 
 	proxy := &ssltun.Proxy{}
-
-	if imap {
-		proxy.Mail = startImap()
-	}
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
