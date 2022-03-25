@@ -14,4 +14,3 @@ index: ./head.tpl ./footer.tpl ./index.tpl
 
 all: index $(HTMLs)
 	feed.sh . > feed.xml
-	map.sh . > map.xml
