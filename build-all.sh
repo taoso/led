@@ -14,8 +14,13 @@ fi
 while true; do
         curl -s -H x-api-key:$api_key $host/rest/events?since=$since > /tmp/events.txt
 
-	jq -r '.[]|select(.type == "PendingDevicesChanged")|.data.added[0].deviceID|select(.!=null)' /tmp/events.txt | sort | uniq | xargs -I % device.sh %
-	jq -r '.[]|select(.type == "FolderCompletion")|.data.folder' /tmp/events.txt | sort | uniq | xargs -I % build.sh %
+	jq -r '.[]|select(.type == "PendingDevicesChanged")|.data.added[0].deviceID|select(.!=null)' \
+		/tmp/events.txt | sort | uniq | \
+		xargs -I % device.sh %
+
+	jq -r '.[]|select(.type == "FolderCompletion")|.data.folder' \
+		/tmp/events.txt | sort | uniq | \
+		xargs -I % build.sh %
 
 	last=$(jq -r '.[]|.id' /tmp/events.txt | tail -n 1)
 	if [[ ! -z "$last" ]]; then
