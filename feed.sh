@@ -27,7 +27,7 @@ grep '^- {"path":' $1/index.yaml | head -n 10 | while read line; do
 	md=".${path//.html/.md}"
 	published=$(echo $line|cut -d\" -f12)"T00:00:00+08:00"
 	updated=`date -u +"%Y-%m-%dT%H:%M:%SZ" -r $md`
-	summary=`1p.sh $md`
+	summary=`awk '/^$/{n++}{if(n==1&&$0!=""){print $0}if(n==2){exit}}' $md`
 
 	cat << EOF
   <entry>
