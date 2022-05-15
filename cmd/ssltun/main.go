@@ -108,10 +108,6 @@ func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 
 func main() {
 	flag.Parse()
-	if flags.http1 == "" && flags.http2 == "" {
-		flag.Usage()
-		return
-	}
 
 	proxy := &ssltun.Proxy{}
 
@@ -125,6 +121,9 @@ func main() {
 	lnH1, lnH2, lnH3, err := listen()
 	if err != nil {
 		panic(err)
+	}
+	if lnH1 == nil && lnH2 == nil && lnH3 == nil {
+		panic("No listen port specified")
 	}
 
 	var tlsCfg *tls.Config

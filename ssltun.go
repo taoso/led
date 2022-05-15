@@ -195,14 +195,14 @@ func (f *FileHandler) Comment(w http.ResponseWriter, req *http.Request) {
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	address := req.RequestURI
-	upConn, err := net.DialTimeout("tcp", address, 500*time.Millisecond)
+	upConn, err := net.DialTimeout("tcp", address, 5*time.Second)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
 	defer upConn.Close()
 
-	var downConn io.ReadWriter
+	var downConn io.ReadWriteCloser
 	if req.ProtoMajor == 2 {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
@@ -212,11 +212,25 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 		downConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 	}
 
-	go func() {
-		io.Copy(upConn, downConn)
-	}()
+	go Copy(upConn, downConn)
+	Copy(downConn, upConn)
+}
 
-	io.Copy(downConn, upConn)
+func Copy(dst io.WriteCloser, src io.ReadCloser) error {
+	defer src.Close()
+	defer dst.Close()
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := src.Read(buf)
+		if err != nil {
+			return err
+		}
+		n, err = dst.Write(buf[:n])
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func proxyHTTP(w http.ResponseWriter, req *http.Request) {
