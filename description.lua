@@ -16,5 +16,9 @@ return {{
     Meta = function (meta)
         meta.description = description
         return meta
-    end
+    end,
+    Image = function (img)
+        img.attributes.loading = "lazy"
+        return img
+    end,
 }}
