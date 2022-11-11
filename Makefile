@@ -3,9 +3,11 @@ HTMLs := $(MDs:.md=.html)
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 %.html: %.md ./head.tpl ./footer.tpl ./article.tpl
-	pandoc -s -p --highlight-style=pygments \
+	pandoc -s -p \
+		--toc \
 		--template article.tpl \
 		--metadata-file=index.yaml \
+		--highlight-style=pygments \
 		--lua-filter $(ROOT_DIR)/description.lua \
 		$< -o $@
 
