@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-mds=$(find $1 -name '*.md')
+mds=$(find $1 -name '*.md' ! -name "draft-*.md")
 
 # 没有 markdown 则不生成 index.html
 if [[ -z "$mds" ]]; then
