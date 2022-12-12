@@ -22,6 +22,29 @@ function get_description(blocks)
   return nil
 end
 
+-- realpath convert path with .. to absolute path
+--
+-- "/1.md" == realpath("a.md", "1.md")
+-- "/1.md" == realpath("/a.md", "1.md")
+-- "/1.md" == realpath("/a/b.md", "../1.md")
+-- "/1.md" == realpath("/a/b/c.md", "../../1.md")
+-- "/1.md" == realpath("/a/b/c/d.md", "../../../1.md")
+function realpath(a, b)
+  if a:sub(1,1) ~= '/' then a = '/' .. a end
+  c = a:reverse()
+  _,j = c:find("/")
+  c = c:sub(j+1,-1)
+  while (true) do
+    _,i = b:find("../")
+    _,j = c:find("/")
+    if i == nil or j == nil then break end
+    b = b:sub(i,-1)
+    c = c:sub(j+1,-1)
+  end
+  if b:sub(1,1) ~= '/' then b = '/' .. b end
+  return c:reverse()..b
+end
+
 return {{
   Blocks = get_description,
   Meta = function (meta)
@@ -36,8 +59,12 @@ return {{
   end,
   Link = function (link)
     local t = link.target
-    if t:sub(1, 4) ~= "http" and t:sub(-3) == ".md"
-    then
+    if t:sub(1,4) ~= "http" and t:sub(-3) == ".md" then
+      local envs = pandoc.system.environment()
+      local url = envs["site_url"]
+      local p = PANDOC_STATE.input_files[1]
+      t = realpath(p, t)
+      t = url .. t
       link.target = t:sub(1,-3).."html"
     end
     return link
