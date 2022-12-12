@@ -51,6 +51,12 @@ return {{
     meta.description = description
     meta.runes = string.format("%0.1f", runes/1000)
     meta.read_time = string.format("%0.1f", runes/400)
+    local envs = pandoc.system.environment()
+    for k,v in pairs(envs) do
+      if meta[k] == nil then
+        meta[k] = v
+      end
+    end
     return meta
   end,
   Image = function (img)
