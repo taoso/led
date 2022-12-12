@@ -34,4 +34,12 @@ return {{
     img.attributes.loading = "lazy"
     return img
   end,
+  Link = function (link)
+    local t = link.target
+    if t:sub(1, 4) ~= "http" and t:sub(-3) == ".md"
+    then
+      link.target = t:sub(1,-3).."html"
+    end
+    return link
+  end,
 }}
