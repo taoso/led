@@ -7,8 +7,6 @@ if [[ -z "$mds" ]]; then
 	exit 0
 fi
 
-source ./env
-
 # 支持跳过子目录 index.html
 if [[ ! -z "$no_child" ]]; then
 	if [[ "$1" != "." ]]; then
@@ -23,7 +21,7 @@ echo "articles:" >> $1/index.yaml
 echo $mds | tr " " "\n" | xargs -I % meta.sh % | \
 	sort -r >> $1/index.yaml
 
-pandoc -s -p -f markdown \
+pandoc -s -p -f markdown --wrap=none \
 	--template index.tpl \
 	--metadata-file=$1/index.yaml \
 	--lua-filter $LUA_FILTER \
