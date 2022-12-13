@@ -26,6 +26,7 @@ end
 --
 -- "/1.md" == realpath("a.md", "1.md")
 -- "/1.md" == realpath("/a.md", "1.md")
+-- "/1.md" == realpath("/a.md", "./1.md")
 -- "/1.md" == realpath("/a/b.md", "../1.md")
 -- "/1.md" == realpath("/a/b/c.md", "../../1.md")
 -- "/1.md" == realpath("/a/b/c/d.md", "../../../1.md")
@@ -34,6 +35,9 @@ function realpath(a, b)
   c = a:reverse()
   _,j = c:find("/")
   c = c:sub(j+1,-1)
+  if b:sub(1,2) == "./" then
+    b = b:sub(3)
+  end
   while (true) do
     _,i = b:find("../")
     _,j = c:find("/")
