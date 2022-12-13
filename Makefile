@@ -2,6 +2,7 @@ MDs := $(shell find . -name '*.md')
 HTMLs := $(MDs:.md=.html)
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
+export ROOT_DIR = $(ROOT_DIR)
 export LUA_FILTER = $(ROOT_DIR)/description.lua
 
 %.html: %.md ./head.tpl ./footer.tpl ./article.tpl
@@ -16,5 +17,5 @@ export LUA_FILTER = $(ROOT_DIR)/description.lua
 index: ./head.tpl ./footer.tpl ./index.tpl
 	find . -type d -exec index.sh {} \;
 
-all: $(HTMLs) index
+all: index $(HTMLs)
 	feed.sh . > feed.xml
