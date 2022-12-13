@@ -9,8 +9,8 @@ while read domain; do
         curl -s -H x-api-key:$api_key $host/rest/config/devices -d '{"deviceID":"'$device_id'"}'
 	folder=/home/st/sync/$domain
 	if [[ ! -d $folder ]]; then
-		echo "init folder"
 		cp -R /home/st/sync/lehu.in $folder
+		sed -E -i '/IMAP|ga_id|gt_id/d' $folder/env
 	fi
 
 	cat << EOF | curl -s -X PUT -H x-api-key:$api_key $host/rest/config/folders/$domain -d @-
