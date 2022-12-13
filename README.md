@@ -7,3 +7,7 @@
 - make
 - pandoc
 - jq
+
+## 整体设计
+
+请参考我的文章 <https://taoshu.in/unix/blog-internal.html>
