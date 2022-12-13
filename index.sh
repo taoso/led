@@ -16,7 +16,10 @@ if [[ ! -z "$no_child" ]]; then
 	fi
 fi
 
-echo "articles:" > $1/index.yaml
+# index.html 没有对应的 markdown 文件件
+# 所以 title 变量为空，pandoc 会输出警告信息
+echo "title: no_warn" > $1/index.yaml
+echo "articles:" >> $1/index.yaml
 echo $mds | tr " " "\n" | xargs -I % meta.sh % | \
 	sort -r |
 	awk -F, '{print "- {\"path\":\""$2"\",\"title\":\""$3"\",\"date\":\""$1"\"}"}' >> $1/index.yaml
