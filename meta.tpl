@@ -1,1 +1,1 @@
-- { "date": "$date$", "path": "$path$", "title": "$title$", "desc": "$desc$" }
+- { "date": "$date$", "path": "$path$", "title": "$title$", "desc": "$desc$", "updated": "$updated$" }
