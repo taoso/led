@@ -21,8 +21,7 @@ fi
 echo "title: no_warn" > $1/index.yaml
 echo "articles:" >> $1/index.yaml
 echo $mds | tr " " "\n" | xargs -I % meta.sh % | \
-	sort -r |
-	awk -F, '{print "- {\"path\":\""$2"\",\"title\":\""$3"\",\"date\":\""$1"\"}"}' >> $1/index.yaml
+	sort -r >> $1/index.yaml
 
 pandoc -s -p -f markdown \
 	--template index.tpl \
