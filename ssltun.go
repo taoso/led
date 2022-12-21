@@ -218,25 +218,8 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 		downConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 	}
 
-	go Copy(upConn, downConn)
-	Copy(downConn, upConn)
-}
-
-func Copy(dst io.WriteCloser, src io.ReadCloser) error {
-	defer src.Close()
-	defer dst.Close()
-
-	buf := make([]byte, 1024)
-	for {
-		n, err := src.Read(buf)
-		if err != nil {
-			return err
-		}
-		n, err = dst.Write(buf[:n])
-		if err != nil {
-			return err
-		}
-	}
+	go io.Copy(upConn, downConn)
+	io.Copy(downConn, upConn)
 }
 
 func proxyHTTP(w http.ResponseWriter, req *http.Request) {
