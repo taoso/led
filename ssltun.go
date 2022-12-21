@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/jhillyerd/enmime"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/net/idna"
 )
 
 type FileHandler struct {
@@ -113,6 +115,10 @@ func (p *Proxy) host(req *http.Request) string {
 	host := req.Host
 	if i := strings.Index(host, ":"); i > 0 {
 		host = host[:i]
+	}
+	host, err := idna.ToUnicode(host)
+	if err != nil {
+		log.Println("host idna.ToUnicode error", host, err)
 	}
 	return host
 }

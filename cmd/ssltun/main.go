@@ -19,6 +19,7 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lvht/ssltun"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/net/idna"
 )
 
 var root, sites, users string
@@ -134,6 +135,10 @@ func main() {
 			Prompt: autocert.AcceptTOS,
 			HostPolicy: func(ctx context.Context, host string) error {
 				sites := names.Load().(map[string]string)
+				host, err := idna.ToUnicode(host)
+				if err != nil {
+					log.Println("idna.ToUnicode error", err)
+				}
 				if _, ok := sites[host]; !ok {
 					return errors.New(host + " not found")
 				}
@@ -146,8 +151,7 @@ func main() {
 	}
 
 	if lnH3 != nil {
-		h3 := http3.Server{Server: &http.Server{Handler: proxy}}
-		h3.TLSConfig = tlsCfg
+		h3 := http3.Server{Handler: proxy, TLSConfig: tlsCfg}
 		go h3.Serve(lnH3.(net.PacketConn))
 	}
 
