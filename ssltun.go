@@ -281,11 +281,14 @@ func (d indexDir) Open(path string) (http.File, error) {
 
 	s, err := f.Stat()
 	if s.IsDir() {
-		index := filepath.Join(path, "index.html")
+		index := filepath.Join(path, ".autoindex")
+		if a, err := d.fs.Open(index); err == nil {
+			a.Close()
+			return f, nil
+		}
+		index = filepath.Join(path, "index.html")
 		if _, err := d.fs.Open(index); err != nil {
-			if err := f.Close(); err != nil {
-				return nil, err
-			}
+			f.Close()
 
 			return nil, err
 		}
