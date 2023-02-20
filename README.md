@@ -8,7 +8,7 @@ If you need IP tunnel, you could use https://github.com/epii1/dtun
 
 Firstly, install the ssltun
 ```
-go get -u -v github.com/lvht/ssltun/cmd/ssltun
+go get -u -v github.com/taoso/ssltun/cmd/ssltun
 ```
 
 Secondly, register one domain name.
