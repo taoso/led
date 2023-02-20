@@ -3,6 +3,7 @@ package ssltun
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SherClockHolmes/webpush-go"
 	"github.com/emersion/go-imap/client"
 	"github.com/gorilla/handlers"
 	"github.com/jhillyerd/enmime"
@@ -128,6 +130,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if f := fs[p.host(req)]; f != nil {
 		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
 			f.Comment(w, req)
+			return
+		}
+
+		if req.RequestURI == "/+/push" && req.Method == http.MethodPost {
+			f.webPush(w, req)
 			return
 		}
 
@@ -367,4 +374,50 @@ func (s *imapReply) Send(_ string, _ []string, msg []byte) error {
 
 	b := bytes.NewBuffer(msg)
 	return c.Append("INBOX", nil, time.Now(), b)
+}
+
+func (f *FileHandler) webPush(w http.ResponseWriter, req *http.Request) {
+	d := map[string]string{
+		"title": req.FormValue("title"),
+		"body":  req.FormValue("body"),
+		"data":  req.FormValue("data"),
+	}
+	m, err := json.Marshal(d)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	var s webpush.Subscription
+	subs := req.FormValue("subs")
+	if err := json.Unmarshal([]byte(subs), &s); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	envs, err := godotenv.Read(filepath.Join(f.Root, "env"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	o := webpush.Options{
+		TTL:             86400,
+		Subscriber:      envs["PUSH_SUBSCRIBER"],
+		VAPIDPublicKey:  envs["PUSH_VAPID_PUB"],
+		VAPIDPrivateKey: envs["PUSH_VAPID_PRI"],
+	}
+
+	r, err := webpush.SendNotification(m, &s, &o)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer r.Body.Close()
+
+	w.WriteHeader(r.StatusCode)
+	io.Copy(w, r.Body)
 }

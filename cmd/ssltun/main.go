@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/lucas-clemente/quic-go/http3"
-	"github.com/lvht/ssltun"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/taoso/ssltun"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
