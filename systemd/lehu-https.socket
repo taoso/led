@@ -1,0 +1,11 @@
+[Unit]
+Description=lehu https socket
+
+[Socket]
+ListenStream=443
+BindIPv6Only=both
+FileDescriptorName=https
+Service=lehu.service
+
+[Install]
+WantedBy=sockets.target

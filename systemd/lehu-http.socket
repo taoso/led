@@ -1,0 +1,11 @@
+[Unit]
+Description=lehu http socket
+
+[Socket]
+ListenStream=80
+BindIPv6Only=both
+FileDescriptorName=http
+Service=lehu.service
+
+[Install]
+WantedBy=sockets.target
