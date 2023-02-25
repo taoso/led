@@ -1,0 +1,13 @@
+[Unit]
+Description=lehu http service
+After=network.target
+Requires=lehu-http.socket lehu-https.socket lehu-quic.socket
+
+[Service]
+ExecStart=/usr/local/bin/ssltun -root /home/st/sync -users /usr/local/etc/lehu/users.txt -sites /usr/local/etc/lehu/sites.txt
+User=st
+Group=st
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
