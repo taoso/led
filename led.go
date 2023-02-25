@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -32,7 +33,7 @@ type FileHandler struct {
 func NewHandler(root string, name string) *FileHandler {
 	path := filepath.Join(root, name)
 
-	h := http.FileServer(indexDir{http.Dir(path)})
+	h := http.FileServer(leDir{http.Dir(path)})
 	h = handlers.CombinedLoggingHandler(os.Stdout, h)
 	h = handlers.CompressHandler(h)
 
@@ -100,7 +101,7 @@ func (p *Proxy) SetSites(root string, sites map[string]string) {
 	for name := range sites {
 		path := filepath.Join(root, name)
 
-		h := http.FileServer(indexDir{http.Dir(path)})
+		h := http.FileServer(leDir{http.Dir(path)})
 		h = handlers.CombinedLoggingHandler(os.Stdout, h)
 		h = handlers.CompressHandler(h)
 
@@ -139,12 +140,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if f.Rewritten(w, req) {
-			return
-		}
-
-		path := req.URL.Path
-		if path == "/env" || strings.HasSuffix(path, ".md") {
-			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
@@ -276,16 +271,28 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-type indexDir struct {
+type leDir struct {
 	fs http.FileSystem
 }
 
-func (d indexDir) Open(path string) (http.File, error) {
-	f, err := d.fs.Open(path)
+func (d leDir) Open(path string) (f http.File, err error) {
+	if strings.HasSuffix(path, "/env") || strings.HasSuffix(path, ".md") {
+		return nil, fs.ErrPermission
+	}
+
+	if strings.HasSuffix(path, ".html") {
+		dir, file := filepath.Split(path)
+		path := filepath.Join(dir, "."+file)
+		f, err = d.fs.Open(path)
+		if err == nil {
+			goto serve
+		}
+	}
+	f, err = d.fs.Open(path)
 	if err != nil {
 		return nil, err
 	}
-
+serve:
 	s, err := f.Stat()
 	if s.IsDir() {
 		index := filepath.Join(path, ".autoindex")
@@ -295,8 +302,6 @@ func (d indexDir) Open(path string) (http.File, error) {
 		}
 		index = filepath.Join(path, "index.html")
 		if _, err := d.fs.Open(index); err != nil {
-			f.Close()
-
 			return nil, err
 		}
 	}
