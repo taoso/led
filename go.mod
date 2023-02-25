@@ -1,4 +1,4 @@
-module github.com/taoso/ssltun
+module github.com/taoso/led
 
 go 1.17
 
