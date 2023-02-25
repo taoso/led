@@ -17,7 +17,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
-	"github.com/taoso/ssltun"
+	"github.com/taoso/led"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
@@ -110,7 +110,7 @@ func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 func main() {
 	flag.Parse()
 
-	proxy := &ssltun.Proxy{}
+	proxy := &led.Proxy{}
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
