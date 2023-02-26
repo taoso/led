@@ -1,11 +1,11 @@
 MDs := $(shell find . -name '*.md')
-HTMLs := $(MDs:.md=.html)
+HTMLs := $(MDs:.md=.htm)
 PWD := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 export ROOT_DIR = $(PWD)
-export LUA_FILTER = $(PWD)/description.lua
+export LUA_FILTER = $(PWD)/desc.lua
 
-%.html: %.md ./head.tpl ./footer.tpl ./article.tpl
+%.htm: %.md ./head.tpl ./footer.tpl ./article.tpl
 	pandoc -s -p --wrap=none \
 		--toc \
 		--template article.tpl \
