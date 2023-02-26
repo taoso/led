@@ -281,13 +281,12 @@ func (d leDir) Open(path string) (f http.File, err error) {
 	}
 
 	if strings.HasSuffix(path, ".html") {
-		dir, file := filepath.Split(path)
-		path := filepath.Join(dir, "."+file)
-		f, err = d.fs.Open(path)
-		if err == nil {
+		htm := strings.TrimSuffix(path, "l")
+		if f, err = d.fs.Open(htm); err == nil {
 			goto serve
 		}
 	}
+
 	f, err = d.fs.Open(path)
 	if err != nil {
 		return nil, err
