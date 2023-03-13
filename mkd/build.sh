@@ -7,5 +7,6 @@ cd ~/sync/$1/
 # https://stackoverflow.com/a/50673471
 set -o allexport
 source ./env
+set +o allexport
 
-make -f ~/lehu-sh/Makefile all
+make -f ~/led/mkd/Makefile all
