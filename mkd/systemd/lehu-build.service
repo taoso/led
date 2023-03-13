@@ -4,9 +4,9 @@ After=network.target
 Requires=syncthing@st.service
 
 [Service]
-Environment=PATH=/home/st/lehu-sh:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/home/st/led/mkd:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=/usr/local/etc/lehu/env
-ExecStart=/home/st/lehu-sh/build-all.sh
+ExecStart=/home/st/led/mkd/build-all.sh
 User=st
 Group=st
 Restart=on-failure
