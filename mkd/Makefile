@@ -12,7 +12,7 @@ export LUA_FILTER = $(PWD)/desc.lua
 		--metadata-file=index.yaml \
 		--highlight-style=pygments \
 		--lua-filter $(LUA_FILTER) \
-		--from gfm+east_asian_line_breaks \
+		--from markdown+east_asian_line_breaks \
 		$< -o $@
 
 index: ./head.tpl ./footer.tpl ./index.tpl
