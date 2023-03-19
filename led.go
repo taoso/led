@@ -139,6 +139,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if strings.HasPrefix(req.RequestURI, "/+/chat") && req.Method == http.MethodPost {
+			p.chat(w, req, f)
+			return
+		}
+
 		if f.Rewritten(w, req) {
 			return
 		}
@@ -424,4 +429,58 @@ func (f *FileHandler) webPush(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(r.StatusCode)
 	io.Copy(w, r.Body)
+}
+
+func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	defer req.Body.Close()
+
+	user, pass, ok := req.BasicAuth()
+	if !ok || !p.auth(user, pass) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	h := req.Header
+
+	h.Del("Te")
+	h.Del("Host")
+	h.Del("Cookie")
+	h.Del("Origin")
+	h.Del("Referer")
+	h.Del("Connection")
+	h.Del("TransferEncoding")
+	h.Del("Proxy-Connection")
+	h.Del("Proxy-Authenticate")
+	h.Del("Proxy-Authorization")
+
+	envs, err := godotenv.Read(filepath.Join(f.Root, "env"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	h.Set("Authorization", "Bearer "+envs["CHAT_TOKEN"])
+
+	req.RequestURI = ""
+	req.URL.Scheme = "https"
+	req.URL.Host = "api.openai.com"
+	req.Host = "api.openai.com"
+	req.URL.Path = req.URL.Path[len("/+/chat"):]
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
