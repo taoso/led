@@ -476,6 +476,9 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer resp.Body.Close()
 
 	for k, vs := range resp.Header {
+		if strings.HasPrefix(k, "Openai") {
+			continue
+		}
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
