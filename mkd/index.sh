@@ -1,28 +1,50 @@
 #!/usr/bin/env bash
 
-mds=$(find $1 -name '*.md' ! -name "draft-*.md")
+dir=$(dirname $1)
 
-# 没有 markdown 则不生成 index.html
-if [[ -z "$mds" ]]; then
-	exit 0
+if [[ -f $dir/env ]]; then
+	set -o allexport
+	source $dir/env
+	set +o allexport
 fi
 
-# 支持跳过子目录 index.html
+# 支持跳过子目录 index.htm
 if [[ ! -z "$no_child" ]]; then
-	if [[ "$1" != "." ]]; then
+	if [[ "$dir" != "." ]]; then
 		exit 0
 	fi
 fi
 
-# index.html 没有对应的 markdown 文件件
+tmp=$(mktemp).yml
+# index.htm 没有对应的 markdown 文件件
 # 所以 title 变量为空，pandoc 会输出警告信息
-echo "title: no_warn" > $1/index.yaml
-echo "articles:" >> $1/index.yaml
-echo $mds | tr " " "\n" | xargs -I % meta.sh % | \
-	sort -r >> $1/index.yaml
+echo -e "title: no_warn\narticles:" > $tmp
+
+find $dir -name '*.yml' \
+	! -name "draft-*.yml" ! -name "index.yml" ! -name "feed.yml" \
+	-exec cat {} + | sort -r >> $tmp
+
+# 没有 markdown 则不生成 index.htm
+if [[ "$(tail -n 1 $tmp)" == "articles:" ]]; then
+	rm $tmp
+	exit 0
+fi
+
+meta=$dir/index.yml
+
+diff -u $tmp $meta > /dev/null
+
+if [ $? -eq 0 ]; then
+	rm $tmp
+	exit 0
+fi
+
+mv $tmp $meta
 
 pandoc -s -p -f markdown --wrap=none \
 	--template index.tpl \
-	--metadata-file=$1/index.yaml \
+	--metadata-file=$meta \
 	--lua-filter $LUA_FILTER \
-	-o $1/index.html /dev/null
+	-o $1 /dev/null
+
+[ -s $1 ] || rm $1
