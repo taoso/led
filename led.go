@@ -126,9 +126,22 @@ func (p *Proxy) host(req *http.Request) string {
 	return host
 }
 
+func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
+	if q := r.URL.RawQuery; q != "" {
+		newPath += "?" + q
+	}
+	w.Header().Set("Location", newPath)
+	w.WriteHeader(http.StatusMovedPermanently)
+}
+
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
+		if strings.HasSuffix(req.RequestURI, "/index.htm") {
+			localRedirect(w, req, "./")
+			return
+		}
+
 		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
 			f.Comment(w, req)
 			return
@@ -288,7 +301,7 @@ func (d leDir) Open(path string) (f http.File, err error) {
 	if strings.HasSuffix(path, ".html") {
 		htm := strings.TrimSuffix(path, "l")
 		if f, err = d.fs.Open(htm); err == nil {
-			goto serve
+			return f, nil
 		}
 	}
 
@@ -296,17 +309,16 @@ func (d leDir) Open(path string) (f http.File, err error) {
 	if err != nil {
 		return nil, err
 	}
-serve:
 	s, err := f.Stat()
 	if s.IsDir() {
-		index := filepath.Join(path, ".autoindex")
-		if a, err := d.fs.Open(index); err == nil {
+		if a, err := d.fs.Open(path + "/.autoindex"); err == nil {
 			a.Close()
 			return f, nil
 		}
-		index = filepath.Join(path, "index.html")
-		if _, err := d.fs.Open(index); err != nil {
-			return nil, err
+		if _, err := d.fs.Open(path + "/index.htm"); err != nil {
+			if _, err := d.fs.Open(path + "/index.html"); err != nil {
+				return nil, err
+			}
 		}
 	}
 
