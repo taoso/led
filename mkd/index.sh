@@ -18,7 +18,9 @@ fi
 tmp=$(mktemp).yml
 # index.htm 没有对应的 markdown 文件件
 # 所以 title 变量为空，pandoc 会输出警告信息
-echo -e "title: no_warn\narticles:" > $tmp
+echo "title: no_warn" > $tmp
+echo "site_title: $site_title" >> $tmp
+echo "articles:" >> $tmp
 
 find $dir -name '*.yml' \
 	! -name "draft-*.yml" ! -name "index.yml" ! -name "feed.yml" \
