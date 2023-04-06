@@ -19,10 +19,10 @@ while true; do
 		/tmp/events.txt | sort | uniq | \
 		xargs -I % device.sh %
 
-	# 如果删除 md 则同步删除对应的 htm
+	# 如果删除 md 则同步删除对应的 htm/yml
 	jq -r '.[]|select(.type == "RemoteChangeDetected")|select(.data.action == "deleted")|"\(.data.folder)/\(.data.path)"' \
-		/tmp/events.txt | sort | uniq | grep -E "\.md$" | sed -E "s/\.md$/.htm/" | \
-		xargs -I % rm -f ~/sync/%
+		/tmp/events.txt | sort | uniq | grep -E "\.md$" | sed -E "s/\.md$//" | \
+		xargs -I % rm -f ~/sync/%.{htm,yml}
 
 	# 目前无法区分新建文件和修改文件，只能无脑触发更新索引页面
 	jq -r '.[]|select(.type == "RemoteChangeDetected")|.data.folder' \
