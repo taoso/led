@@ -13,6 +13,13 @@ while read domain; do
 		sed -E -i '/IMAP|ga_id|gt_id/d' $folder/env
 	fi
 
+	fdata=$(curl -s -H x-api-key:$api_key $host/rest/config/folders/$domain)
+	if [[ "$fdata" != "No folder with given ID" ]]; then
+		devices=$(echo $fdata | jq "{devices}|.devices+=[{\"deviceID\":\"$device_id\"}]")
+		echo $devices | curl -s -X PATCH -H x-api-key:$api_key $host/rest/config/folders/$domain -d @-
+		continue
+	fi
+
 	cat << EOF | curl -s -X PUT -H x-api-key:$api_key $host/rest/config/folders/$domain -d @-
 	{
 	  "id": "$domain",
