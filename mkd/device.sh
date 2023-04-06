@@ -24,8 +24,8 @@ while read domain; do
 	  "fsWatcherEnabled": true,
 	  "fsWatcherDelayS": 1
 	}
+EOF
 
 	curl -s -X POST -H x-api-key:$api_key "$host/rest/db/ignores?folder=$domain" \
 		--data-raw '{"ignore":["*.yml","*.htm",".DS_Store","feed.xml","#*#","*.swp","*.tmp","~$*",".#*","*.autosave.*"]}'
-EOF
 done
