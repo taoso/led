@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -86,6 +88,8 @@ type Proxy struct {
 	users atomic.Value
 
 	BPE *tiktoken.BPE
+
+	chatLinks sync.Map
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -146,6 +150,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if req.RequestURI == "/+/push" && req.Method == http.MethodPost {
 			f.webPush(w, req)
+			return
+		}
+
+		if strings.HasPrefix(req.RequestURI, "/+/chat/cancel") && req.Method == http.MethodPost {
+			p.chatCancel(w, req, f)
 			return
 		}
 
@@ -508,7 +517,12 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 	defer resp.Body.Close()
 
+	linkKey := user + resp.Header.Get("X-Request-Id")
+	p.chatLinks.Store(linkKey, resp.Body)
+
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.Header().Set("X-Request-Id", resp.Header.Get("X-Request-Id"))
+	fmt.Println(resp.Header.Get("X-Request-Id"))
 	w.WriteHeader(resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK || !msg.Stream {
@@ -581,4 +595,32 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 			return
 		}
 	}
+
+	if err := s.Err(); err != nil {
+		log.Println("scan err", err, errors.Is(err, io.ErrClosedPipe))
+		w.Write([]byte("data: [DONE," +
+			strconv.Itoa(promptTokens+replyTokens) + "," +
+			strconv.Itoa(promptTokens) + "," +
+			strconv.Itoa(replyTokens) +
+			"]"))
+		return
+	}
+}
+
+func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	user, pass, ok := req.BasicAuth()
+	if !ok || !p.auth(user, pass) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	linkKey := user + req.URL.Query().Get("id")
+	v, ok := p.chatLinks.Load(linkKey)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("link not found"))
+		return
+	}
+	v.(io.Closer).Close()
+	p.chatLinks.Delete(linkKey)
 }
