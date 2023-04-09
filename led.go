@@ -1,9 +1,11 @@
 package led
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -12,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,6 +24,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/jhillyerd/enmime"
 	"github.com/joho/godotenv"
+	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/idna"
 )
@@ -80,6 +84,8 @@ func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 type Proxy struct {
 	sites atomic.Value
 	users atomic.Value
+
+	BPE *tiktoken.BPE
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -99,16 +105,7 @@ func (p *Proxy) SetUsers(users map[string]string) {
 func (p *Proxy) SetSites(root string, sites map[string]string) {
 	hs := make(map[string]*FileHandler, len(sites))
 	for name := range sites {
-		path := filepath.Join(root, name)
-
-		h := http.FileServer(leDir{http.Dir(path)})
-		h = handlers.CombinedLoggingHandler(os.Stdout, h)
-		h = handlers.CompressHandler(h)
-
-		hs[name] = &FileHandler{
-			Root: path,
-			fs:   h,
-		}
+		hs[name] = NewHandler(root, name)
 	}
 
 	p.sites.Store(hs)
@@ -444,26 +441,47 @@ func (f *FileHandler) webPush(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	defer req.Body.Close()
-
 	user, pass, ok := req.BasicAuth()
 	if !ok || !p.auth(user, pass) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	h := req.Header
+	defer req.Body.Close()
 
-	h.Del("Te")
-	h.Del("Host")
-	h.Del("Cookie")
-	h.Del("Origin")
-	h.Del("Referer")
-	h.Del("Connection")
-	h.Del("TransferEncoding")
-	h.Del("Proxy-Connection")
-	h.Del("Proxy-Authenticate")
-	h.Del("Proxy-Authorization")
+	var msg struct {
+		Messages []map[string]string `json:"messages"`
+		Model    string              `json:"model"`
+		Stream   bool                `json:"stream"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&msg); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	promptTokens := p.BPE.CountMessage(msg.Messages)
+	replyTokens := 0
+
+	defer func() {
+		fmt.Printf(
+			"total_tokens:%d, prompt_tokens:%d, completion_tokens:%d\n",
+			promptTokens+replyTokens,
+			promptTokens,
+			replyTokens,
+		)
+	}()
+
+	// msg.Stream = true
+	// msg.Model = "gpt-3.5-turbo"
+
+	b, err := json.Marshal(msg)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	envs, err := godotenv.Read(filepath.Join(f.Root, "env"))
 	if err != nil {
@@ -471,15 +489,18 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		w.Write([]byte(err.Error()))
 		return
 	}
-	h.Set("Authorization", "Bearer "+envs["CHAT_TOKEN"])
 
-	req.RequestURI = ""
-	req.URL.Scheme = "https"
-	req.URL.Host = "api.openai.com"
-	req.Host = "api.openai.com"
-	req.URL.Path = req.URL.Path[len("/+/chat"):]
+	url := "https://api.openai.com" + req.URL.Path[len("/+/chat"):]
+	r, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	r.Header.Set("Authorization", "Bearer "+envs["CHAT_TOKEN"])
+	r.Header.Set("Content-Type", req.Header.Get("Content-Type"))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -487,15 +508,77 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 	defer resp.Body.Close()
 
-	for k, vs := range resp.Header {
-		if strings.HasPrefix(k, "Openai") {
-			continue
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+
+	if resp.StatusCode != http.StatusOK || !msg.Stream {
+		b, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusOK {
+			var r struct {
+				Usage struct {
+					PromptTokens int `json:"prompt_tokens"`
+					ReplyTokens  int `json:"completion_tokens"`
+				} `json:"usage"`
+			}
+			if err := json.Unmarshal(b, &r); err != nil {
+				log.Println("unmarshal data error: ", err)
+			}
+			promptTokens = r.Usage.PromptTokens
+			replyTokens = r.Usage.ReplyTokens
 		}
-		for _, v := range vs {
-			w.Header().Add(k, v)
-		}
+		w.Write(b)
+		return
 	}
 
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	s := bufio.NewScanner(resp.Body)
+	for s.Scan() {
+		l := s.Text()
+		if !strings.HasPrefix(l, "data: ") {
+			continue
+		}
+
+		if strings.HasPrefix(l, "data: [DONE]") {
+			w.Write([]byte("data: [DONE," +
+				strconv.Itoa(promptTokens+replyTokens) + "," +
+				strconv.Itoa(promptTokens) + "," +
+				strconv.Itoa(replyTokens) +
+				"]"))
+			return
+		}
+
+		var data struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
+				Index        int    `json:"index"`
+			} `json:"choices"`
+		}
+		err := json.Unmarshal([]byte(l[len("data: "):]), &data)
+		if err != nil {
+			log.Println("unmarshal data error: ", err)
+			return
+		}
+
+		for _, c := range data.Choices {
+			replyTokens += p.BPE.Count(c.Delta.Content)
+		}
+
+		b, err := json.Marshal(data)
+		if err != nil {
+			log.Println("marshal data error: ", err)
+			return
+		}
+
+		buf := make([]byte, len(b)+len("data: ")+len("\n\n"))
+		copy(buf, []byte("data: "))
+		copy(buf[len("data: "):], b)
+		copy(buf[len(b)+len("data: "):], []byte("\n\n"))
+
+		if _, err := w.Write(buf); err != nil {
+			log.Println("write data error: ", err)
+			return
+		}
+	}
 }

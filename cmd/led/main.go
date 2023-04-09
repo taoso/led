@@ -18,6 +18,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
+	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
@@ -107,10 +108,22 @@ func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 	return
 }
 
+const tiktokenURL = "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken"
+
 func main() {
 	flag.Parse()
 
 	proxy := &led.Proxy{}
+
+	resp, err := http.Get(tiktokenURL)
+	if err != nil {
+		panic(err)
+	}
+
+	proxy.BPE, err = tiktoken.NewCL100K(resp.Body)
+	if err != nil {
+		panic(err)
+	}
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
