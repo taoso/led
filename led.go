@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,7 +14,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -470,20 +468,26 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
-	promptTokens := p.BPE.CountMessage(msg.Messages)
-	replyTokens := 0
+	var u struct {
+		Usage struct {
+			ReplyTokens  int `json:"completion_tokens"`
+			PromptTokens int `json:"prompt_tokens"`
+			TotalTokens  int `json:"total_tokens"`
+		} `json:"usage"`
+	}
 
 	defer func() {
-		fmt.Printf(
-			"total_tokens:%d, prompt_tokens:%d, completion_tokens:%d\n",
-			promptTokens+replyTokens,
-			promptTokens,
-			replyTokens,
-		)
+		if msg.Stream {
+			b, _ := json.Marshal(u)
+			b = append([]byte("data: "), b...)
+			b = append(b, []byte("\n\ndata: [DONE]\n\n")...)
+			w.Write(b)
+		}
+		fmt.Printf("%+v\n", u.Usage)
 	}()
 
-	// msg.Stream = true
-	// msg.Model = "gpt-3.5-turbo"
+	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
+	u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 
 	b, err := json.Marshal(msg)
 	if err != nil {
@@ -528,17 +532,9 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	if resp.StatusCode != http.StatusOK || !msg.Stream {
 		b, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusOK {
-			var r struct {
-				Usage struct {
-					PromptTokens int `json:"prompt_tokens"`
-					ReplyTokens  int `json:"completion_tokens"`
-				} `json:"usage"`
-			}
-			if err := json.Unmarshal(b, &r); err != nil {
+			if err := json.Unmarshal(b, &u); err != nil {
 				log.Println("unmarshal data error: ", err)
 			}
-			promptTokens = r.Usage.PromptTokens
-			replyTokens = r.Usage.ReplyTokens
 		}
 		w.Write(b)
 		return
@@ -547,17 +543,8 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	s := bufio.NewScanner(resp.Body)
 	for s.Scan() {
 		l := s.Text()
-		if !strings.HasPrefix(l, "data: ") {
+		if !strings.HasPrefix(l, "data: {") {
 			continue
-		}
-
-		if strings.HasPrefix(l, "data: [DONE]") {
-			w.Write([]byte("data: [DONE," +
-				strconv.Itoa(promptTokens+replyTokens) + "," +
-				strconv.Itoa(promptTokens) + "," +
-				strconv.Itoa(replyTokens) +
-				"]"))
-			return
 		}
 
 		var data struct {
@@ -565,8 +552,8 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
-				FinishReason string `json:"finish_reason"`
-				Index        int    `json:"index"`
+				FinishReason *string `json:"finish_reason,omitempty"`
+				Index        int     `json:"index,omitempty"`
 			} `json:"choices"`
 		}
 		err := json.Unmarshal([]byte(l[len("data: "):]), &data)
@@ -576,7 +563,8 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		}
 
 		for _, c := range data.Choices {
-			replyTokens += p.BPE.Count(c.Delta.Content)
+			u.Usage.ReplyTokens += p.BPE.Count(c.Delta.Content)
+			u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 		}
 
 		b, err := json.Marshal(data)
@@ -597,13 +585,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 
 	if err := s.Err(); err != nil {
-		log.Println("scan err", err, errors.Is(err, io.ErrClosedPipe))
-		w.Write([]byte("data: [DONE," +
-			strconv.Itoa(promptTokens+replyTokens) + "," +
-			strconv.Itoa(promptTokens) + "," +
-			strconv.Itoa(replyTokens) +
-			"]"))
-		return
+		log.Println("scan err", err)
 	}
 }
 
