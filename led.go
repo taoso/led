@@ -596,7 +596,7 @@ func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHand
 		return
 	}
 
-	linkKey := user + req.URL.Query().Get("id")
+	linkKey := user + req.FormValue("id")
 	v, ok := p.chatLinks.Load(linkKey)
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
