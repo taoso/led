@@ -18,6 +18,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
+	"github.com/taoso/led/alipay"
+	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
@@ -124,6 +126,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	proxy.Alipay = alipay.New(
+		os.Getenv("ALIPAY_APP_ID"),
+		os.Getenv("ALIPAY_PRIVATE_KEY"),
+		os.Getenv("ALIPAY_PUBLIC_KEY"),
+	)
+
+	proxy.TokenRepo = store.NewTokenRepo(os.Getenv("TOKEN_REPO_DB"))
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
