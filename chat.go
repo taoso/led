@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
@@ -228,7 +229,22 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		Created:  args.Created,
 	}
 
-	pk, err := ecdsa.ParsePubkey(args.Pubkey)
+	var pk ecdsa.PublicKey
+	if args.UserID != 0 {
+		u, err := p.TokenRepo.GetWallet(args.UserID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		} else if u.ID == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("invalid user_id"))
+			return
+		}
+		pk, err = ecdsa.GetPubkey(u.Pubkey)
+	} else {
+		pk, err = ecdsa.ParsePubkey(args.Pubkey)
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid pubkey"))
@@ -243,9 +259,9 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 	}
 
 	order := pay.Order{
+		TradeNo:   genTradeNo(pk),
 		Amount:    strconv.Itoa(args.CentNum / 100),
 		Subject:   strconv.Itoa(args.TokenNum) + " tokens",
-		TradeNo:   strconv.Itoa(int(time.Now().UnixNano())),
 		Extra:     url.QueryEscape(string(body)),
 		NotifyURL: "https://" + f.Name + "/+/buy-tokens-notify",
 	}
@@ -257,6 +273,20 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"qr":"` + qr + `","ttl":900}`))
+}
+
+// genTradeNo 为当前用户生成订单号
+//
+// 当前毫秒时间戳再追加一部分用户公钥信息，几乎不可能冲突。
+func genTradeNo(pubkey ecdsa.PublicKey) string {
+	ts := time.Now().UTC().Format("20060102150405.000")
+	ts = strings.Replace(ts, ".", "", 1)
+
+	var i uint32
+	p := unsafe.Pointer(&i)
+	copy((*[4]byte)(p)[:], pubkey.X.Bytes()[:4])
+
+	return ts + strconv.Itoa(int(i))
 }
 
 func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *FileHandler) {
@@ -288,16 +318,26 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
+	l, err := p.TokenRepo.FindLog(trade.OutTradeNo)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	} else if l.ID != 0 {
+		w.Write([]byte("success"))
+		return
+	}
+
 	log := store.TokenLog{
 		UserID:   args.UserID,
 		Type:     store.LogTypeBuy,
 		TokenNum: args.TokenNum,
 		ExtraNum: args.CentNum,
+		PayNo:    trade.OutTradeNo,
 		Extra: map[string]string{
-			"pubkey":          ecdsa.Compress(pk),
-			"our_trade_no":    trade.OutTradeNo,
-			"alipay_trade_no": trade.TradeNo,
-			"alipay_buyer_id": trade.BuyerId,
+			"trade_no":  trade.TradeNo,
+			"_buyer_id": trade.BuyerId,
+			"_pubkey":   ecdsa.Compress(pk),
 		},
 		Sign:    args.Sign,
 		Created: args.Created,

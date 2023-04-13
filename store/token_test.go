@@ -25,8 +25,8 @@ func TestTokenRepo(t *testing.T) {
 		TokenNum: 1000,
 		ExtraNum: 20,
 		Extra: KV{
-			"pubkey":          "my-pubkey",
-			"alipay_buyer_id": "123",
+			"_pubkey":   "my-pubkey",
+			"_buyer_id": "123",
 		},
 		Sign:    "my sign",
 		Created: time.Now(),
@@ -84,7 +84,7 @@ func TestTokenRepo(t *testing.T) {
 		UserID:   0,
 		TokenNum: 1000,
 		ExtraNum: 20,
-		Extra:    KV{"pubkey": "my-pubkey"},
+		Extra:    KV{"_pubkey": "my-pubkey"},
 		Sign:     "my sign3",
 		Created:  time.Now(),
 	}

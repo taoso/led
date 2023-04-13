@@ -156,13 +156,18 @@ func TestBuyTokensNotify(t *testing.T) {
 		assert.Equal(t, args.CentNum, log.ExtraNum)
 		assert.Equal(t, args.Sign, log.Sign)
 		assert.Equal(t, args.Created, log.Created)
-		assert.Equal(t, "A6jQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r", log.Extra["pubkey"])
-		assert.Equal(t, params.Get("out_trade_no"), log.Extra["our_trade_no"])
-		assert.Equal(t, params.Get("trade_no"), log.Extra["alipay_trade_no"])
-		assert.Equal(t, params.Get("buyer_id"), log.Extra["alipay_buyer_id"])
+		assert.Equal(t, "A6jQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r", log.Extra["_pubkey"])
+		assert.Equal(t, params.Get("out_trade_no"), log.PayNo)
+		assert.Equal(t, params.Get("trade_no"), log.Extra["trade_no"])
+		assert.Equal(t, params.Get("buyer_id"), log.Extra["_buyer_id"])
 		return
 	})
 	defer g2.Unpatch()
+
+	g3 := monkey.Patch((*store.TokenRepo).FindLog, func(_ *store.TokenRepo, payNo string) (l store.TokenLog, err error) {
+		return
+	})
+	defer g3.Unpatch()
 
 	p.buyTokensNotify(w, req, &FileHandler{Name: "lehu.in"})
 
