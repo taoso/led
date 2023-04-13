@@ -19,6 +19,14 @@ func TestVerifyES256(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestCompress(t *testing.T) {
+	pubkey := "BKjQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r1gegK/6OPh/L4oKcfxl8P6tPa5EvTK3tibnOjlk2Vxs="
+	pk, err := ParsePubkey(pubkey)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "A6jQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r", Compress(pk))
+}
+
 func TestGetPubkey(t *testing.T) {
 	compkey := "A6jQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r"
 	pubkey := "BKjQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r1gegK/6OPh/L4oKcfxl8P6tPa5EvTK3tibnOjlk2Vxs="

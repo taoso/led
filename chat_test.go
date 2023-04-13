@@ -119,15 +119,15 @@ func TestBuyTokensNotify(t *testing.T) {
 	args := alipayArgs{
 		TokenNum: 4000,
 		CentNum:  100,
-		Sign:     "s1",
-		Pubkey:   "p1",
+		Sign:     "D407CaeVnPXkzyDPTI94tq8L460u5K1GvGgDDm40TCfgxh+hcWZ9cusP4ZvGJEJiS808yULCM19UO1SJnxYmTQ==",
+		Pubkey:   "BKjQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r1gegK/6OPh/L4oKcfxl8P6tPa5EvTK3tibnOjlk2Vxs=",
 		Created:  time.Date(2023, 4, 12, 23, 23, 23, 0, time.UTC),
 	}
 	b, err := json.Marshal(args)
 	assert.Nil(t, err)
 
 	params := url.Values{}
-	params.Set("passback_params", string(b))
+	params.Set("passback_params", url.QueryEscape(string(b)))
 	params.Set("buyer_id", "1024")
 	params.Set("trade_no", "tn1")
 	params.Set("out_trade_no", "otn1")
@@ -156,7 +156,7 @@ func TestBuyTokensNotify(t *testing.T) {
 		assert.Equal(t, args.CentNum, log.ExtraNum)
 		assert.Equal(t, args.Sign, log.Sign)
 		assert.Equal(t, args.Created, log.Created)
-		assert.Equal(t, args.Pubkey, log.Extra["pubkey"])
+		assert.Equal(t, "A6jQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r", log.Extra["pubkey"])
 		assert.Equal(t, params.Get("out_trade_no"), log.Extra["our_trade_no"])
 		assert.Equal(t, params.Get("trade_no"), log.Extra["alipay_trade_no"])
 		assert.Equal(t, params.Get("buyer_id"), log.Extra["alipay_buyer_id"])

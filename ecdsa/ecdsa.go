@@ -58,6 +58,11 @@ func ParsePubkey(pubkey string) (pk ecdsa.PublicKey, err error) {
 	return
 }
 
+func Compress(k ecdsa.PublicKey) string {
+	b := elliptic.MarshalCompressed(k.Curve, k.X, k.Y)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 // VerifyES256 校验 ES256 签名
 func VerifyES256(data, sign string, pubkey ecdsa.PublicKey) (ok bool, err error) {
 	hash := sha256.Sum256([]byte(data))
