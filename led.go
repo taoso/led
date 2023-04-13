@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/taoso/led/alipay"
+	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/bcrypt"
@@ -25,7 +25,7 @@ type Proxy struct {
 
 	BPE *tiktoken.BPE
 
-	Alipay *alipay.Alipay
+	Alipay *pay.Alipay
 
 	TokenRepo *store.TokenRepo
 

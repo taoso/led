@@ -1,4 +1,4 @@
-package alipay
+package pay
 
 import (
 	"fmt"

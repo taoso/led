@@ -9,6 +9,7 @@ require (
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
 	github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400
 	github.com/gorilla/handlers v1.5.1
+	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/jhillyerd/enmime v0.10.1
 	github.com/joho/godotenv v1.5.1
 	github.com/quic-go/quic-go v0.32.0
