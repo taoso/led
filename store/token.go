@@ -51,7 +51,8 @@ func (w *TokenWallet) Schema() string {
     	extra TEXT,
     	created DATETIME,
     	updated DATETIME
-); CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
+); 
+	CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
 }
 
 type KV map[string]string
@@ -76,6 +77,7 @@ type TokenLog struct {
 	ID       int     `db:"id"`        // 日志编号
 	UserID   int     `db:"user_id"`   // 用户标识
 	Type     LogType `db:"type"`      // 流水日志类型
+	PayNo    string  `db:"pay_no"`    // 支付业务订单号
 	TokenNum int     `db:"token_num"` // 需要更新的 Token 数量
 	AfterNum int     `db:"after_num"` // 更新后的 Token 数量
 	ExtraNum int     `db:"extra_num"` // 购买和退款时为法币金额，消耗时为请求 Token 数量
@@ -97,8 +99,11 @@ func (l *TokenLog) Schema() string {
         extra_num INTEGER NOT NULL,
         extra TEXT NOT NULL,
         sign TEXT NOT NULL,
+        pay_no TEXT NOT NULL,
         created TIMESTAMP NOT NULL
-); CREATE INDEX user_order ON ` + l.TableName() + `(user_id, id);`
+); 
+	CREATE INDEX user_order ON ` + l.TableName() + `(user_id, id);
+	CREATE INDEX pay_no ON ` + l.TableName() + `(pay_no) where pay_no != "";`
 }
 
 // SignData 返回需要签名的数据
@@ -125,7 +130,7 @@ func NewTokenRepo(path string) *TokenRepo {
 	return &TokenRepo{db: db}
 }
 
-func (r TokenRepo) Init() error {
+func (r *TokenRepo) Init() error {
 	s1 := (*TokenWallet).Schema(nil)
 	_, err := r.db.Exec(s1)
 	if err != nil {
@@ -136,12 +141,15 @@ func (r TokenRepo) Init() error {
 	return err
 }
 
-func (r TokenRepo) GetWallet(id int) (w TokenWallet, err error) {
+func (r *TokenRepo) GetWallet(id int) (w TokenWallet, err error) {
 	err = r.db.Get(&w, "select * from "+w.TableName()+" where id = ?", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
 	return
 }
 
-func (r TokenRepo) newWallet(tx *sqlx.Tx, w *TokenWallet) error {
+func (r *TokenRepo) newWallet(tx *sqlx.Tx, w *TokenWallet) error {
 	res, err := tx.Insert(w)
 	if err != nil {
 		err = fmt.Errorf("%v %w", err, ServerErr)
@@ -168,8 +176,8 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		}
 	}()
 	now := time.Now()
-	if log.UserID == 0 && log.Extra["pubkey"] != "" { // 老用户在新设备登录场景
-		err = tx.Get(&w, "select * from "+w.TableName()+" where pubkey = ?", log.Extra["pubkey"])
+	if log.UserID == 0 && log.Extra["_pubkey"] != "" { // 老用户在新设备登录场景
+		err = tx.Get(&w, "select * from "+w.TableName()+" where pubkey = ?", log.Extra["_pubkey"])
 		if !errors.Is(err, sql.ErrNoRows) && err != nil {
 			err = fmt.Errorf("%v %w", err, ServerErr)
 			return
@@ -181,15 +189,13 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 	if log.UserID == 0 { // 新用户场景
 		w = TokenWallet{
 			Tokens: log.TokenNum,
-			Pubkey: log.Extra["pubkey"],
+			Pubkey: log.Extra["_pubkey"],
 			Extra: KV{
-				"alipay": log.Extra["alipay_buyer_id"],
+				"alipay": log.Extra["_buyer_id"],
 			},
 			Created: now,
 			Updated: now,
 		}
-		delete(log.Extra, "pubkey")
-		delete(log.Extra, "alipay_buyer_id")
 		if err = r.newWallet(tx, &w); err != nil {
 			return
 		}
@@ -222,6 +228,10 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		}
 	}
 	log.AfterNum = w.Tokens
+
+	delete(log.Extra, "_pubkey")
+	delete(log.Extra, "_buyer_id")
+
 	res, err := tx.Insert(log)
 	if err != nil {
 		err = fmt.Errorf("%v %w", err, ServerErr)
@@ -240,9 +250,18 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 	return
 }
 
-func (r TokenRepo) ScanLogs(userID, last, num int) (logs []TokenLog, err error) {
+func (r *TokenRepo) ScanLogs(userID, last, num int) (logs []TokenLog, err error) {
 	q := "select * from " + (&TokenLog{}).TableName() + " where " +
 		"user_id = ? and id < ? order by id desc limit ?"
 	err = r.db.Select(&logs, q, userID, last, num)
+	return
+}
+
+func (r *TokenRepo) FindLog(payNo string) (log TokenLog, err error) {
+	q := "select * from " + (&TokenLog{}).TableName() + " where pay_no = ?"
+	err = r.db.Get(&log, q, payNo)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
 	return
 }

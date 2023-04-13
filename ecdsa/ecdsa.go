@@ -10,6 +10,8 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
+type PublicKey = ecdsa.PublicKey
+
 var keyCache *lru.Cache[string, ecdsa.PublicKey]
 
 func init() {
