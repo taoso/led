@@ -50,7 +50,7 @@ func TestBuyTokens(t *testing.T) {
 	g2 := monkey.Patch((*alipay.Alipay).CreateQR, func(_ *alipay.Alipay, o alipay.Order) (string, error) {
 		assert.Equal(t, "1", o.Amount)
 		assert.Equal(t, "4000 tokens", o.Subject)
-		assert.Equal(t, string(b), o.Extra)
+		assert.Equal(t, url.QueryEscape(string(b)), o.Extra)
 		assert.Equal(t, "https://lehu.in/+/buy-tokens-notify", o.NotifyURL)
 		return "https://example.qr", nil
 	})
@@ -143,12 +143,19 @@ func TestBuyTokensNotify(t *testing.T) {
 	params.Set("out_trade_no", "otn1")
 
 	w := httptest.NewRecorder()
+
 	req := httptest.NewRequest("POST", "/+/buy-tokens-notify", strings.NewReader(params.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.ParseForm()
+
 	p := &Proxy{}
 
-	g1 := monkey.Patch((*alipay3.Client).VerifySign, func(_ *alipay3.Client, values url.Values) (bool, error) {
-		return true, nil
+	g1 := monkey.Patch((*alipay.Alipay).GetNotification, func(_ *alipay.Alipay, req *http.Request) (n alipay3.TradeNotification, err error) {
+		n.PassbackParams = req.FormValue("passback_params")
+		n.BuyerId = req.FormValue("buyer_id")
+		n.TradeNo = req.FormValue("trade_no")
+		n.OutTradeNo = req.FormValue("out_trade_no")
+		return
 	})
 	defer g1.Unpatch()
 
@@ -171,7 +178,4 @@ func TestBuyTokensNotify(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, `success`, w.Body.String())
-}
-
-func TestFoo(t *testing.T) {
 }
