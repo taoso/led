@@ -11,21 +11,11 @@ import (
 	"time"
 
 	"github.com/go-kiss/monkey"
-	alipay3 "github.com/smartwalle/alipay/v3"
+	"github.com/smartwalle/alipay/v3"
 	"github.com/stretchr/testify/assert"
-	"github.com/taoso/led/alipay"
+	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 )
-
-func TestVerifyES256(t *testing.T) {
-	data := "hello"
-	sign := "SnBIMSMsFZRiMhFQG65465iXDp3I4k6KDdbzo8w0jYinZlvXKhXG4CN5UzCanNP2MKGE9e1Hy6LLYf+inpCpDQ=="
-	pubkey := "BKjQmlNjXfWLeprdKDpmdHNFQZz4mdQktEfXo0FsSj+r1gegK/6OPh/L4oKcfxl8P6tPa5EvTK3tibnOjlk2Vxs="
-
-	ok, err := VerifyES256(data, sign, pubkey)
-	assert.Nil(t, err)
-	assert.True(t, ok)
-}
 
 func TestBuyTokens(t *testing.T) {
 	args := alipayArgs{
@@ -47,7 +37,7 @@ func TestBuyTokens(t *testing.T) {
 	})
 	defer g1.Unpatch()
 
-	g2 := monkey.Patch((*alipay.Alipay).CreateQR, func(_ *alipay.Alipay, o alipay.Order) (string, error) {
+	g2 := monkey.Patch((*pay.Alipay).CreateQR, func(_ *pay.Alipay, o pay.Order) (string, error) {
 		assert.Equal(t, "1", o.Amount)
 		assert.Equal(t, "4000 tokens", o.Subject)
 		assert.Equal(t, url.QueryEscape(string(b)), o.Extra)
@@ -150,7 +140,7 @@ func TestBuyTokensNotify(t *testing.T) {
 
 	p := &Proxy{}
 
-	g1 := monkey.Patch((*alipay.Alipay).GetNotification, func(_ *alipay.Alipay, req *http.Request) (n alipay3.TradeNotification, err error) {
+	g1 := monkey.Patch((*pay.Alipay).GetNotification, func(_ *pay.Alipay, req *http.Request) (n alipay.TradeNotification, err error) {
 		n.PassbackParams = req.FormValue("passback_params")
 		n.BuyerId = req.FormValue("buyer_id")
 		n.TradeNo = req.FormValue("trade_no")

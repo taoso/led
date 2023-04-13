@@ -3,15 +3,10 @@ package led
 import (
 	"bufio"
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,7 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/taoso/led/alipay"
+	"github.com/taoso/led/ecdsa"
+	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 )
 
@@ -232,14 +228,21 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		Created:  args.Created,
 	}
 
-	ok, err := VerifyES256(log.SignData(), args.Sign, args.Pubkey)
+	pk, err := ecdsa.ParsePubkey(args.Pubkey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid pubkey"))
+		return
+	}
+
+	ok, err := ecdsa.VerifyES256(log.SignData(), args.Sign, pk)
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid signature"))
 		return
 	}
 
-	order := alipay.Order{
+	order := pay.Order{
 		Amount:    strconv.Itoa(args.CentNum / 100),
 		Subject:   strconv.Itoa(args.TokenNum) + " tokens",
 		TradeNo:   strconv.Itoa(int(time.Now().UnixNano())),
@@ -300,32 +303,4 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 	}
 
 	w.Write([]byte("success"))
-}
-
-func VerifyES256(data, sign, pubkey string) (ok bool, err error) {
-	hash := sha256.Sum256([]byte(data))
-
-	sig, err := base64.StdEncoding.DecodeString(sign)
-	if err != nil {
-		return
-	}
-
-	key, err := base64.StdEncoding.DecodeString(pubkey)
-	if err != nil {
-		return
-	}
-
-	x, y := elliptic.Unmarshal(elliptic.P256(), key)
-	pub := ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X:     x,
-		Y:     y,
-	}
-
-	r := big.Int{}
-	s := big.Int{}
-	r.SetBytes(sig[:32])
-	s.SetBytes(sig[32:])
-
-	return ecdsa.Verify(&pub, hash[:], &r, &s), nil
 }

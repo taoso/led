@@ -18,7 +18,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
-	"github.com/taoso/led/alipay"
+	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/acme/autocert"
@@ -127,7 +127,7 @@ func main() {
 		panic(err)
 	}
 
-	proxy.Alipay = alipay.New(
+	proxy.Alipay = pay.New(
 		os.Getenv("ALIPAY_APP_ID"),
 		os.Getenv("ALIPAY_PRIVATE_KEY"),
 		os.Getenv("ALIPAY_PUBLIC_KEY"),
