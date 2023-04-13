@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -242,7 +243,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		Amount:    strconv.Itoa(args.CentNum / 100),
 		Subject:   strconv.Itoa(args.TokenNum) + " tokens",
 		TradeNo:   strconv.Itoa(int(time.Now().UnixNano())),
-		Extra:     string(body),
+		Extra:     url.QueryEscape(string(body)),
 		NotifyURL: "https://" + f.Name + "/+/buy-tokens-notify",
 	}
 	qr, err := p.Alipay.CreateQR(order)
@@ -256,10 +257,6 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 }
 
 func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	body, err := io.ReadAll(req.Body)
-	req.Body = io.NopCloser(bytes.NewBuffer(body))
-	log.Println("aliyun callback", req.Body)
-
 	trade, err := p.Alipay.GetNotification(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -268,7 +265,13 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 	}
 
 	args := alipayArgs{}
-	err = json.Unmarshal([]byte(trade.PassbackParams), &args)
+	params, err := url.QueryUnescape(trade.PassbackParams)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	err = json.Unmarshal([]byte(params), &args)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
