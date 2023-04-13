@@ -281,13 +281,20 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
+	pk, err := ecdsa.ParsePubkey(args.Pubkey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
 	log := store.TokenLog{
 		UserID:   args.UserID,
 		Type:     store.LogTypeBuy,
 		TokenNum: args.TokenNum,
 		ExtraNum: args.CentNum,
 		Extra: map[string]string{
-			"pubkey":          args.Pubkey,
+			"pubkey":          ecdsa.Compress(pk),
 			"our_trade_no":    trade.OutTradeNo,
 			"alipay_trade_no": trade.TradeNo,
 			"alipay_buyer_id": trade.BuyerId,

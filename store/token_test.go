@@ -14,6 +14,7 @@ func TestTokenRepo(t *testing.T) {
 	f, err := os.CreateTemp("", "led-*.db")
 	assert.Nil(t, err)
 	f.Close()
+	defer os.Remove(f.Name())
 
 	repo := NewTokenRepo(f.Name())
 	err = repo.Init()
@@ -77,18 +78,37 @@ func TestTokenRepo(t *testing.T) {
 	assert.Equal(t, 1, w.ID)
 	assert.Equal(t, 400, w.Tokens)
 
+	// 未指定用户ID则尝试使用公钥确定用户身份
+	l4 := TokenLog{
+		Type:     LogTypeBuy,
+		UserID:   0,
+		TokenNum: 1000,
+		ExtraNum: 20,
+		Extra:    KV{"pubkey": "my-pubkey"},
+		Sign:     "my sign3",
+		Created:  time.Now(),
+	}
+
+	w, err = repo.UpdateWallet(&l4)
+	assert.Nil(t, err)
+	assert.Equal(t, 4, l4.ID)
+	assert.Equal(t, 1400, l4.AfterNum)
+	assert.Equal(t, 1, w.ID)
+	assert.Equal(t, 1400, w.Tokens)
+
 	logs, err := repo.ScanLogs(1, math.MaxInt, 2)
 	assert.Nil(t, err)
-	assert.Equal(t, 3, logs[0].ID)
-	assert.Equal(t, 2, logs[1].ID)
+	assert.Equal(t, 4, logs[0].ID)
+	assert.Equal(t, 3, logs[1].ID)
 
 	logs, err = repo.ScanLogs(1, logs[1].ID, 2)
 	assert.Nil(t, err)
-	assert.Equal(t, 1, logs[0].ID)
+	assert.Equal(t, 2, logs[0].ID)
+	assert.Equal(t, 1, logs[1].ID)
 
 	w, err = repo.GetWallet(1)
 	assert.Nil(t, err)
-	assert.Equal(t, 400, w.Tokens)
+	assert.Equal(t, 1400, w.Tokens)
 }
 
 func TestSignData(t *testing.T) {

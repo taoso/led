@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -33,7 +34,7 @@ type TokenRepo struct {
 type TokenWallet struct {
 	ID     int    `db:"id"`     // 钱包编号
 	Tokens int    `db:"tokens"` // Token 余额
-	Pubkey string `db:"pubkey"` // 用户签名公钥 P-256 ECDSA
+	Pubkey string `db:"pubkey"` // 用户签名公钥 P-256 ECDSA，压缩，base64
 	Extra  KV     `db:"extra"`  // 扩展信息，如支付宝ID等
 
 	Created time.Time `db:"created"` // 创建时间
@@ -50,7 +51,7 @@ func (w *TokenWallet) Schema() string {
     	extra TEXT,
     	created DATETIME,
     	updated DATETIME
-);`
+); CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
 }
 
 type KV map[string]string
@@ -167,7 +168,17 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		}
 	}()
 	now := time.Now()
-	if log.UserID == 0 {
+	if log.UserID == 0 && log.Extra["pubkey"] != "" { // 老用户在新设备登录场景
+		err = tx.Get(&w, "select * from "+w.TableName()+" where pubkey = ?", log.Extra["pubkey"])
+		if !errors.Is(err, sql.ErrNoRows) && err != nil {
+			err = fmt.Errorf("%v %w", err, ServerErr)
+			return
+		}
+		if w.ID != 0 {
+			log.UserID = w.ID
+		}
+	}
+	if log.UserID == 0 { // 新用户场景
 		w = TokenWallet{
 			Tokens: log.TokenNum,
 			Pubkey: log.Extra["pubkey"],
@@ -184,22 +195,24 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		}
 		log.UserID = w.ID
 	} else {
-		err = tx.Get(&w, "select * from "+w.TableName()+" where id = ?", log.UserID)
-		if err != nil {
-			err = fmt.Errorf("%v %w", err, ServerErr)
-			return
-		}
-		if w.ID == 0 {
-			err = fmt.Errorf("wallet not found %w", ClientErr)
-			return
-		}
-		if w.Tokens <= 0 {
-			err = fmt.Errorf("there is not enough tokens %w", ClientErr)
-			return
+		if w.ID == 0 { // 前面使用公钥查没查到，继续使用用户ID查找
+			err = tx.Get(&w, "select * from "+w.TableName()+" where id = ?", log.UserID)
+			if err != nil {
+				err = fmt.Errorf("%v %w", err, ServerErr)
+				return
+			}
+			if w.ID == 0 {
+				err = fmt.Errorf("wallet not found %w", ClientErr)
+				return
+			}
 		}
 		if log.Type == LogTypeBuy {
 			w.Tokens += log.TokenNum
 		} else {
+			if w.Tokens <= 0 {
+				err = fmt.Errorf("there is not enough tokens %w", ClientErr)
+				return
+			}
 			w.Tokens -= log.TokenNum
 		}
 		w.Updated = now
