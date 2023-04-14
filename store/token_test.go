@@ -3,7 +3,6 @@ package store
 import (
 	"math"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -113,7 +112,7 @@ func TestTokenRepo(t *testing.T) {
 
 func TestSignData(t *testing.T) {
 	now := time.Now()
-	nows := strconv.Itoa(int(now.Unix()))
+	nows := now.UTC().Format("2006-01-02T15:04:05.000Z")
 
 	l1 := TokenLog{
 		Type:     LogTypeBuy,

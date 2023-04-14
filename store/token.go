@@ -114,7 +114,8 @@ func (l *TokenLog) Schema() string {
 // SignData 返回需要签名的数据
 func (l *TokenLog) SignData() string {
 	ss := []string{
-		strconv.Itoa(int(l.Created.Unix())),
+		// see js Date.toISOString
+		l.Created.UTC().Format("2006-01-02T15:04:05.000Z"),
 		strconv.Itoa(int(l.Type)),
 	}
 	switch l.Type {
