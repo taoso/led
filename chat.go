@@ -425,3 +425,128 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 
 	w.Write([]byte("success"))
 }
+
+type tokenLogArgs struct {
+	TradeNo string    `json:"trade_no"`
+	Sign    string    `json:"sign"`
+	Pubkey  string    `json:"pubkey"`
+	Created time.Time `json:"created"`
+}
+
+func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	args := tokenLogArgs{}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer req.Body.Close()
+	if err := json.Unmarshal(body, &args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if args.Created.Sub(time.Now()).Abs() > 30*time.Second {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("client time is inaccurate"))
+		return
+	}
+
+	pk, err := ecdsa.ParsePubkey(args.Pubkey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid pubkey"))
+		return
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(args.TradeNo)
+	buf.WriteString(args.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+
+	ok, _, err := ecdsa.VerifyES256(buf.String(), args.Sign, pk)
+	if err != nil || !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	log, err := p.TokenRepo.FindLog(args.TradeNo)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	b, err := json.Marshal(log)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(b)
+}
+
+type tokenWalletArgs struct {
+	Sign    string    `json:"sign"`
+	Pubkey  string    `json:"pubkey"`
+	Created time.Time `json:"created"`
+}
+
+func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	args := tokenWalletArgs{}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer req.Body.Close()
+	if err := json.Unmarshal(body, &args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if args.Created.Sub(time.Now()).Abs() > 30*time.Second {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("client time is inaccurate"))
+		return
+	}
+
+	pk, err := ecdsa.ParsePubkey(args.Pubkey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid pubkey"))
+		return
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(args.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+
+	ok, _, err := ecdsa.VerifyES256(buf.String(), args.Sign, pk)
+	if err != nil || !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	u, err := p.TokenRepo.FindWallet(ecdsa.Compress(pk))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	b, err := json.Marshal(u)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(b)
+}

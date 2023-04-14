@@ -147,6 +147,14 @@ func (r *TokenRepo) Init() error {
 	return err
 }
 
+func (r *TokenRepo) FindWallet(pubkey string) (w TokenWallet, err error) {
+	err = r.db.Get(&w, "select * from "+w.TableName()+" where pubkey = ?", pubkey)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+
 func (r *TokenRepo) GetWallet(id int) (w TokenWallet, err error) {
 	err = r.db.Get(&w, "select * from "+w.TableName()+" where id = ?", id)
 	if errors.Is(err, sql.ErrNoRows) {
