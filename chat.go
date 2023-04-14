@@ -104,7 +104,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	var chatID string
 
 	defer func() {
-		if msg.Stream {
+		if msg.Stream && u.Usage.TotalTokens > u.Usage.PromptTokens {
 			tl := store.TokenLog{
 				UserID:   msg.UserID,
 				Type:     store.LogTypeCost,
@@ -346,7 +346,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"qr":"` + qr + `","ttl":900}`))
+	w.Write([]byte(`{"qr":"` + qr + `","trade_no":"` + order.TradeNo + `","ttl":900}`))
 }
 
 // genTradeNo 为当前用户生成订单号
