@@ -127,11 +127,13 @@ func main() {
 		panic(err)
 	}
 
-	proxy.Alipay = pay.New(
-		os.Getenv("ALIPAY_APP_ID"),
-		os.Getenv("ALIPAY_PRIVATE_KEY"),
-		os.Getenv("ALIPAY_PUBLIC_KEY"),
-	)
+	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
+		proxy.Alipay = pay.New(
+			id,
+			os.Getenv("ALIPAY_PRIVATE_KEY"),
+			os.Getenv("ALIPAY_PUBLIC_KEY"),
+		)
+	}
 
 	proxy.TokenRepo = store.NewTokenRepo(os.Getenv("TOKEN_REPO_DB"))
 

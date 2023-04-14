@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-kiss/sqlx"
+	"github.com/taoso/led/ecdsa"
 	_ "modernc.org/sqlite"
 )
 
@@ -53,6 +54,10 @@ func (w *TokenWallet) Schema() string {
     	updated DATETIME
 ); 
 	CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
+}
+
+func (w *TokenWallet) GetPubkey() (ecdsa.PublicKey, error) {
+	return ecdsa.GetPubkey(w.Pubkey)
 }
 
 type KV map[string]string

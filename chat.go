@@ -3,8 +3,8 @@ package led
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -21,18 +21,20 @@ import (
 )
 
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	user, pass, ok := req.BasicAuth()
-	if !ok || !p.auth(user, pass) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
 	defer req.Body.Close()
 
-	var msg struct {
+	type chatmsg struct {
 		Messages []map[string]string `json:"messages"`
 		Model    string              `json:"model"`
 		Stream   bool                `json:"stream"`
+		User     string              `json:"user"`
+	}
+
+	var msg struct {
+		chatmsg
+		Sign    string    `json:"_sign,omitempty"`
+		UserID  int       `json:"_user_id,omitempty"`
+		Created time.Time `json:"_created,omitempty"`
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&msg); err != nil {
@@ -41,28 +43,99 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
+	if msg.Created.Sub(time.Now()).Abs() > 30*time.Second {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid created"))
+		return
+	}
+
+	wallet, err := p.TokenRepo.GetWallet(msg.UserID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	} else if wallet.ID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("user_id not found"))
+		return
+	} else if wallet.Tokens <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("token is not enough"))
+		return
+	}
+
+	pk, err := wallet.GetPubkey()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+
+	var buf bytes.Buffer
+	for _, m := range msg.Messages {
+		buf.WriteString(m["role"])
+		buf.WriteString(m["content"])
+	}
+	buf.WriteString(strconv.Itoa(msg.UserID))
+	buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+
+	ok, hash, err := ecdsa.VerifyES256(buf.String(), msg.Sign, pk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	msg.Stream = true
+	msg.Model = "gpt-3.5-turbo"
+
 	var u struct {
 		Usage struct {
 			ReplyTokens  int `json:"completion_tokens"`
 			PromptTokens int `json:"prompt_tokens"`
 			TotalTokens  int `json:"total_tokens"`
+			RemainTokens int `json:"remain_tokens"`
 		} `json:"usage"`
 	}
 
+	var chatID string
+
 	defer func() {
 		if msg.Stream {
+			tl := store.TokenLog{
+				UserID:   msg.UserID,
+				Type:     store.LogTypeCost,
+				TokenNum: u.Usage.TotalTokens,
+				Extra: map[string]string{
+					"chatid":        chatID,
+					"sha256":        hex.EncodeToString(hash[:]),
+					"prompt_tokens": strconv.Itoa(u.Usage.PromptTokens),
+				},
+				Created: msg.Created,
+				Sign:    msg.Sign,
+			}
+			uw, err := p.TokenRepo.UpdateWallet(&tl)
+			if err != nil {
+				log.Printf("save token log %+v err %v", tl, err)
+			} else {
+				u.Usage.RemainTokens = uw.Tokens
+			}
 			b, _ := json.Marshal(u)
 			b = append([]byte("data: "), b...)
 			b = append(b, []byte("\n\ndata: [DONE]\n\n")...)
 			w.Write(b)
 		}
-		fmt.Printf("%+v\n", u.Usage)
 	}()
 
 	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
 	u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 
-	b, err := json.Marshal(msg)
+	msg.User = strconv.Itoa(msg.UserID)
+
+	b, err := json.Marshal(msg.chatmsg)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -87,12 +160,13 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 	defer resp.Body.Close()
 
-	linkKey := user + resp.Header.Get("X-Request-Id")
+	chatID = resp.Header.Get("X-Request-Id")
+
+	linkKey := msg.User + chatID
 	p.chatLinks.Store(linkKey, resp.Body)
 
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	w.Header().Set("X-Request-Id", resp.Header.Get("X-Request-Id"))
-	fmt.Println(resp.Header.Get("X-Request-Id"))
+	w.Header().Set("X-Request-Id", chatID)
 	w.WriteHeader(resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK || !msg.Stream {
@@ -251,7 +325,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		return
 	}
 
-	ok, err := ecdsa.VerifyES256(log.SignData(), args.Sign, pk)
+	ok, _, err := ecdsa.VerifyES256(log.SignData(), args.Sign, pk)
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid signature"))

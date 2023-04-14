@@ -14,7 +14,7 @@ func TestVerifyES256(t *testing.T) {
 	pk, err := ParsePubkey(pubkey)
 	assert.Nil(t, err)
 
-	ok, err := VerifyES256(data, sign, pk)
+	ok, _, err := VerifyES256(data, sign, pk)
 	assert.Nil(t, err)
 	assert.True(t, ok)
 }

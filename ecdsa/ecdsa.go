@@ -66,8 +66,8 @@ func Compress(k ecdsa.PublicKey) string {
 }
 
 // VerifyES256 校验 ES256 签名
-func VerifyES256(data, sign string, pubkey ecdsa.PublicKey) (ok bool, err error) {
-	hash := sha256.Sum256([]byte(data))
+func VerifyES256(data, sign string, pubkey ecdsa.PublicKey) (ok bool, hash [32]byte, err error) {
+	hash = sha256.Sum256([]byte(data))
 
 	sig, err := base64.StdEncoding.DecodeString(sign)
 	if err != nil {
@@ -79,5 +79,6 @@ func VerifyES256(data, sign string, pubkey ecdsa.PublicKey) (ok bool, err error)
 	r.SetBytes(sig[:32])
 	s.SetBytes(sig[32:])
 
-	return ecdsa.Verify(&pubkey, hash[:], &r, &s), nil
+	ok = ecdsa.Verify(&pubkey, hash[:], &r, &s)
+	return
 }
