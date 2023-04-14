@@ -93,6 +93,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if req.RequestURI == "/+/buy-tokens-log" {
+			p.buyTokensLog(w, req, f)
+			return
+		}
+
+		if req.RequestURI == "/+/buy-tokens-wallet" {
+			p.buyTokensWallet(w, req, f)
+			return
+		}
+
 		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
 			f.Comment(w, req)
 			return
