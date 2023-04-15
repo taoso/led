@@ -231,20 +231,70 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
+type cancelArgs struct {
+	ChatID  string    `json:"chat_id"`
+	UserID  int       `json:"user_id"`
+	Created time.Time `json:"created"`
+	Sign    string    `json:"sign"`
+}
+
 func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	user, pass, ok := req.BasicAuth()
-	if !ok || !p.auth(user, pass) {
-		w.WriteHeader(http.StatusUnauthorized)
+	var args cancelArgs
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer req.Body.Close()
+
+	if err := json.Unmarshal(body, &args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
 		return
 	}
 
-	linkKey := user + req.FormValue("id")
+	wallet, err := p.TokenRepo.GetWallet(args.UserID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	} else if wallet.ID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("user_id not found"))
+		return
+	}
+
+	pk, err := wallet.GetPubkey()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(args.ChatID)
+	buf.WriteString(args.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+
+	ok, _, err := ecdsa.VerifyES256(buf.String(), args.Sign, pk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	linkKey := strconv.Itoa(args.UserID) + args.ChatID
 	v, ok := p.chatLinks.Load(linkKey)
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("link not found"))
 		return
 	}
+
 	v.(io.Closer).Close()
 	p.chatLinks.Delete(linkKey)
 }
