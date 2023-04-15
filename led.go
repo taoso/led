@@ -98,6 +98,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if req.RequestURI == "/+/buy-tokens-logs" {
+			p.buyTokensLogs(w, req, f)
+			return
+		}
+
 		if req.RequestURI == "/+/buy-tokens-wallet" {
 			p.buyTokensWallet(w, req, f)
 			return
