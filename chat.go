@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -481,6 +482,85 @@ func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHa
 	}
 	w.Header().Set("Content-Type", "application/json")
 	b, err := json.Marshal(log)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(b)
+}
+
+type tokenLogsArgs struct {
+	UserID  int       `json:"user_id"`
+	LastID  int       `json:"last_id"`
+	Sign    string    `json:"sign"`
+	Created time.Time `json:"created"`
+}
+
+func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	args := tokenLogsArgs{}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer req.Body.Close()
+	if err := json.Unmarshal(body, &args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if args.Created.Sub(time.Now()).Abs() > 30*time.Second {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("client time is inaccurate"))
+		return
+	}
+
+	u, err := p.TokenRepo.GetWallet(args.UserID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("client time is inaccurate"))
+		return
+	} else if u.ID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("user not found"))
+		return
+	}
+
+	pk, err := u.GetPubkey()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("invalid pubkey"))
+		return
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(strconv.Itoa(args.UserID))
+	buf.WriteString(strconv.Itoa(args.LastID))
+	buf.WriteString(args.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+
+	ok, _, err := ecdsa.VerifyES256(buf.String(), args.Sign, pk)
+	if err != nil || !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	if args.LastID <= 0 {
+		args.LastID = math.MaxInt
+	}
+
+	logs, err := p.TokenRepo.ScanLogs(u.ID, args.LastID, 10)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	b, err := json.Marshal(logs)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
