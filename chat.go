@@ -223,6 +223,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 			log.Println("write data error: ", err)
 			return
 		}
+		w.(http.Flusher).Flush()
 	}
 
 	if err := s.Err(); err != nil {
