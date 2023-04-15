@@ -257,6 +257,8 @@ type alipayArgs struct {
 	Created  time.Time `json:"created"`
 }
 
+const tokenPrice = 5
+
 func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	args := alipayArgs{}
 
@@ -285,7 +287,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		return
 	}
 
-	if args.TokenNum != args.CentNum/25*1000 {
+	if args.TokenNum != args.CentNum/tokenPrice*1000 {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid token_num"))
 		return
@@ -628,5 +630,6 @@ func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *Fil
 		w.Write([]byte(err.Error()))
 		return
 	}
+	w.Header().Set("X-Token-Price", strconv.Itoa(tokenPrice))
 	w.Write(b)
 }
