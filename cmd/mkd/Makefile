@@ -33,5 +33,6 @@ index.htm: ./head.tpl ./footer.tpl ./index.tpl $(METAs)
 
 all: $(INDXs) $(HTMLs)
 	feed.sh . > feed.xml
+	map.sh . > map.xml
 
 .PHONY: $(INDXs)

@@ -9,4 +9,4 @@ set -o allexport
 source ./env
 set +o allexport
 
-make -f ~/led/mkd/Makefile all
+make -f ~/led/cmd/mkd/Makefile all
