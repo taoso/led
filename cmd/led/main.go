@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
@@ -152,6 +153,9 @@ func main() {
 		panic("No listen port specified")
 	}
 
+	h3port := lnH3.LocalAddr().(*net.UDPAddr).Port
+	proxy.AltSvc = fmt.Sprintf(`h3=":%d",h3-29=":%d"`, h3port, h3port)
+
 	var tlsCfg *tls.Config
 	if lnH2 != nil || lnH3 != nil {
 		dir := os.Getenv("HOME") + "/.autocert"
@@ -194,7 +198,12 @@ func main() {
 
 	// https
 	lnTLS := tls.NewListener(lnH2, tlsCfg)
-	http.Serve(lnTLS, proxy)
+	s := http.Server{
+		Handler:     proxy,
+		IdleTimeout: 30 * time.Second,
+	}
+
+	s.Serve(lnTLS)
 }
 
 func watch(path string) (watcher *fsnotify.Watcher, ch chan interface{}) {
