@@ -29,6 +29,8 @@ type Proxy struct {
 
 	TokenRepo *store.TokenRepo
 
+	AltSvc string
+
 	chatLinks sync.Map
 }
 
@@ -76,6 +78,8 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Alt-Svc", p.AltSvc)
+
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
