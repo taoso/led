@@ -70,12 +70,10 @@ return {{
   Link = function (link)
     local t = link.target
     if t:sub(1,4) ~= "http" and t:sub(-3) == ".md" then
-      local envs = pandoc.system.environment()
-      local url = envs["site_url"]
-      local p = PANDOC_STATE.input_files[1]
-      t = realpath(p, t)
-      t = url .. t
       link.target = t:sub(1,-3).."html"
+    end
+    if #link.content == 0 then
+      link.content = pandoc.List:new({pandoc.Str(link.target)})
     end
     return link
   end,
