@@ -14,7 +14,6 @@ export LUA_FILTER = $(PWD)/desc.lua
 	pandoc -s -p --wrap=none \
 		--toc \
 		--template article.tpl \
-		--metadata-file=index.yml \
 		--highlight-style=pygments \
 		--lua-filter $(LUA_FILTER) \
 		--from markdown+east_asian_line_breaks \
