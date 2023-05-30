@@ -26,6 +26,6 @@ index: $(METAs)
 all: index $(HTMLs)
 
 clean:
-	rm -f $(METAs)
-	rm -f $(HTMLs)
-	find . \( -name 'index.yml' -o -name 'index.htm' \) -type f -exec rm {} \;
+	find . \( -name '*.yml' -o -name '*.htm' \) -type f -exec rm {} \;
+
+.PHONY: index all clean
