@@ -1,17 +1,16 @@
 MDs := $(shell find . -name '*.md')
 HTMLs := $(MDs:.md=.htm)
+METAs := $(MDs:.md=.yml)
 
 PWD := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 export ROOT_DIR = $(PWD)
 export LUA_FILTER = $(PWD)/desc.lua
 
-.PRECIOUS: %.yml
-
 %.yml: %.md
-	meta.sh $< > $@
+	$(PWD)/meta.sh $< > $@
 
-%.htm: %.md %.yml ./head.tpl ./footer.tpl ./article.tpl
+%.htm: %.md ./head.tpl ./footer.tpl ./article.tpl
 	pandoc -s -p --wrap=none \
 		--toc \
 		--template article.tpl \
@@ -21,7 +20,13 @@ export LUA_FILTER = $(PWD)/desc.lua
 		--from markdown+east_asian_line_breaks \
 		$< -o $@
 
-all: $(HTMLs)
-	index.sh .
-	feed.sh . > feed.xml
-	map.sh . > map.xml
+index: $(METAs)
+	$(PWD)/index.sh .
+	$(PWD)/feed.sh .
+
+all: index $(HTMLs)
+
+clean:
+	rm -f $(METAs)
+	rm -f $(HTMLs)
+	find . \( -name 'index.yml' -o -name 'index.htm' \) -type f -exec rm {} \;
