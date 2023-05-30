@@ -12,8 +12,8 @@ function get_description(blocks)
   for _, block in ipairs(blocks) do
     if block.t == 'Para' then
       local s = pandoc.utils.stringify(block)
-      s,_ = s:gsub("[a-zA-Z-]+","a")
-      s,_ = s:gsub("%s+","")
+      s,_ = s:gsub("[0-9a-zA-Z-]+","a")
+      s,_ = s:gsub("[ \t\r\n]+","")
 
       runes = runes + utf8.len(s)
     end
