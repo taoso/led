@@ -13,6 +13,7 @@ export LUA_FILTER = $(PWD)/desc.lua
 %.htm: %.md ./head.tpl ./footer.tpl ./article.tpl
 	pandoc -s -p --wrap=none \
 		--toc \
+		--mathml \
 		--template article.tpl \
 		--highlight-style=pygments \
 		--lua-filter $(LUA_FILTER) \
