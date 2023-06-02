@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.2.0
-	github.com/emersion/go-imap v1.2.1
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
 	github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400
@@ -24,7 +23,6 @@ require (
 	github.com/cention-sany/utf7 v0.0.0-20170124080048-26cad61bd60a // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
-	github.com/emersion/go-sasl v0.0.0-20220912192320-0145f2c60ead // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
