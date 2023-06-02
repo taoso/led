@@ -153,8 +153,10 @@ func main() {
 		panic("No listen port specified")
 	}
 
-	h3port := lnH3.LocalAddr().(*net.UDPAddr).Port
-	proxy.AltSvc = fmt.Sprintf(`h3=":%d",h3-29=":%d"`, h3port, h3port)
+	if lnH3 != nil {
+		h3port := lnH3.LocalAddr().(*net.UDPAddr).Port
+		proxy.AltSvc = fmt.Sprintf(`h3=":%d",h3-29=":%d"`, h3port, h3port)
+	}
 
 	var tlsCfg *tls.Config
 	if lnH2 != nil || lnH3 != nil {
