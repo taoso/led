@@ -219,7 +219,7 @@ local function code_to_figure (block)
   local fname = basename .. '.' .. draws .. '.svg'
 
   if not dgr_opt.opt['embed-font'] then
-    imgdata = string.gsub(str, "\n<defs>.-</defs>\n", "")
+    imgdata = string.gsub(imgdata, "\n<defs>.-</defs>\n", "")
   end
 
   write_file(fname, imgdata)
