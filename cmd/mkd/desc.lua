@@ -87,7 +87,7 @@ local xelatex = {
   compile = function (self, code, user_opts)
     return with_temporary_directory('tex', function (tmpdir)
       return with_working_directory(tmpdir, function ()
-        code = "\\documentclass[dvisvgm]{standalone}\n" .. code
+        code = "\\documentclass[tikz,dvisvgm]{standalone}\n" .. code
         write_file('draw.tex', code)
 
         local args = {'-halt-on-error', '-no-pdf', 'draw.tex'}
