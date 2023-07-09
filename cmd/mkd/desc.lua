@@ -226,6 +226,7 @@ local function code_to_figure (block)
 
   -- Create the image object.
   local image = pandoc.Image(dgr_opt.alt, "/"..fname, "", dgr_opt['image-attr'])
+  image.attributes.class = 'code'
 
   -- Create a figure if the diagram has a caption; otherwise return
   -- just the image.
