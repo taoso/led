@@ -78,6 +78,9 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 	buf.WriteString(strconv.Itoa(msg.UserID))
 	buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+	if msg.Model != "gpt-3.5-turbo" {
+		buf.WriteString(msg.Model)
+	}
 
 	ok, hash, err := ecdsa.VerifyES256(buf.String(), msg.Sign, pk)
 	if err != nil {
@@ -91,7 +94,25 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 
 	msg.Stream = true
-	msg.Model = "gpt-3.5-turbo"
+	var tokenRate int
+	switch msg.Model {
+	case "3.5-8k", "", "gpt-3.5-turbo":
+		tokenRate = 1
+		msg.Model = "gpt-3.5-turbo"
+	case "3.5-16k":
+		tokenRate = 2
+		msg.Model = "gpt-3.5-turbo-16k"
+	case "4.0-8k":
+		tokenRate = 30
+		msg.Model = "gpt-4"
+	// case "4.0-32k":
+	// 	tokenRate = 60
+	// 	msg.Model = "gpt-4-32k"
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid model"))
+		return
+	}
 
 	var u struct {
 		Usage struct {
@@ -99,19 +120,25 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 			PromptTokens int `json:"prompt_tokens"`
 			TotalTokens  int `json:"total_tokens"`
 			RemainTokens int `json:"remain_tokens"`
+			TokenRate    int `json:"token_rate"`
 		} `json:"usage"`
 	}
 
 	var chatID string
 
 	defer func() {
-		if msg.Stream && u.Usage.TotalTokens > u.Usage.PromptTokens {
+		if msg.Stream && u.Usage.ReplyTokens > 0 {
+			u.Usage.TokenRate = tokenRate
+			u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
+
 			tl := store.TokenLog{
 				UserID:   msg.UserID,
 				Type:     store.LogTypeCost,
-				TokenNum: u.Usage.TotalTokens,
+				TokenNum: u.Usage.TotalTokens * tokenRate,
 				Extra: map[string]string{
 					"chatid":        chatID,
+					"model":         msg.Model,
+					"token_rate":    strconv.Itoa(tokenRate),
 					"sha256":        hex.EncodeToString(hash[:]),
 					"prompt_tokens": strconv.Itoa(u.Usage.PromptTokens),
 				},
@@ -132,7 +159,6 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}()
 
 	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
-	u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 
 	msg.User = strconv.Itoa(msg.UserID)
 
@@ -205,7 +231,6 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 		for _, c := range data.Choices {
 			u.Usage.ReplyTokens += p.BPE.Count(c.Delta.Content)
-			u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 		}
 
 		b, err := json.Marshal(data)
