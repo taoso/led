@@ -114,6 +114,12 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
+	if t := tokenRate * 100; wallet.Tokens < t {
+		w.WriteHeader(http.StatusPaymentRequired)
+		w.Write([]byte("Token 不足 " + strconv.Itoa(t)))
+		return
+	}
+
 	var u struct {
 		Usage struct {
 			ReplyTokens  int `json:"completion_tokens"`
