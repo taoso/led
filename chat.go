@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ import (
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 )
+
+const utcTime = "2006-01-02T15:04:05.000Z"
 
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
@@ -330,6 +333,164 @@ func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHand
 	p.chatLinks.Delete(linkKey)
 }
 
+func (p *Proxy) checkName(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	u, err := p.TokenRepo.FindWalletByName(args.Name)
+	if err != nil {
+		return
+	}
+	if u.ID != 0 {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte("用户名已存在"))
+		return
+	}
+
+	w.Write([]byte("ok"))
+}
+
+var usernameRE = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
+
+func (p *Proxy) setAuth(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if !usernameRE.MatchString(args.Username) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid username"))
+		return
+	}
+	if args.Password == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid password"))
+		return
+	}
+
+	// 验签通过则用户必存在
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+	wallet, err := p.TokenRepo.GetWallet(uid)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if u, err := p.TokenRepo.FindWalletByName(args.Username); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	} else if u.ID != 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("用户名已存在"))
+		return
+	}
+
+	wallet.Username = args.Username
+	wallet.SetPassword(args.Password)
+
+	if err = p.TokenRepo.SaveWallet(wallet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+	w.Write([]byte("ok"))
+}
+
+func (p *Proxy) login(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	u, err := p.TokenRepo.FindWalletByName(args.Username)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	// 同时检查用户不存在的情形
+	if !u.CheckPassword(args.Password) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	s := store.Session{
+		UserID:  u.ID,
+		Pubkey:  req.Header.Get("cg-pubk"),
+		Agent:   req.UserAgent(),
+		Address: req.RemoteAddr,
+		Created: time.Now(),
+	}
+
+	if err = p.TokenRepo.AddSession(&s); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte("{" +
+		"\"sid\":\"" + strconv.Itoa(s.ID) + "\"," +
+		"\"uid\":\"" + strconv.Itoa(s.UserID) + "\"" +
+		"}"))
+}
+
+func (p *Proxy) listSession(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+
+	ss, err := p.TokenRepo.ListSession(uid)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(ss); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+}
+
+func (p *Proxy) delSession(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		ID int `json:"id"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+
+	if err := p.TokenRepo.DelSession(args.ID, uid); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write([]byte("ok"))
+}
+
 type alipayArgs struct {
 	UserID   int       `json:"user_id"`
 	TokenNum int       `json:"token_num"`
@@ -477,9 +638,8 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
-	l, err := p.TokenRepo.FindLog(trade.OutTradeNo)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if l, err := p.TokenRepo.FindLog(trade.OutTradeNo); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	} else if l.ID != 0 {
