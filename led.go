@@ -1,16 +1,19 @@
 package led
 
 import (
+	"bytes"
 	"encoding/base64"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
@@ -87,6 +90,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if strings.HasPrefix(req.RequestURI, "/+/v2/") {
+			p.api2(w, req, f)
+			return
+		}
+
 		if req.RequestURI == "/+/buy-tokens" && req.Method == http.MethodPost {
 			p.buyTokens(w, req, f)
 			return
@@ -152,6 +160,107 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		proxyHTTPS(w, req)
 	} else {
 		proxyHTTP(w, req)
+	}
+}
+
+func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	sign := req.Header.Get("cg-sign")
+	pubkey := req.Header.Get("cg-pubk")
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+	sid, _ := strconv.Atoi(req.Header.Get("cg-sid"))
+	now, err := time.Parse(utcTime, req.Header.Get("cg-now"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	if time.Now().Sub(now).Abs() > 1*time.Minute {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	b := req.Body
+	defer b.Close()
+
+	data, err := io.ReadAll(b)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(data))
+
+	var pk ecdsa.PublicKey
+	if sid > 0 {
+		s, err := p.TokenRepo.GetSession(sid)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		// 会话被删除
+		if s.ID == 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		pk, _ = s.GetPubkey()
+		req.Header.Set("cg-uid", strconv.Itoa(s.UserID))
+	} else if uid > 0 {
+		u, err := p.TokenRepo.GetWallet(uid)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		if u.ID == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("invalid user_id"))
+			return
+		}
+		pk, _ = u.GetPubkey()
+	} else {
+		pk, err = ecdsa.ParsePubkey(pubkey)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	}
+
+	// 保存压缩版本，供后续使用
+	req.Header.Set("cg-pubk", ecdsa.Compress(pk))
+
+	s := req.URL.Path + string(data) + now.UTC().Format(utcTime)
+	ok, _, err := ecdsa.VerifyES256(s, sign, pk)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+		return
+	}
+
+	switch req.URL.Path[len("/+/v2/"):] {
+	case "check-name":
+		p.checkName(w, req, f)
+	case "set-auth":
+		p.setAuth(w, req, f)
+	case "login":
+		p.login(w, req, f)
+	case "list-session":
+		p.listSession(w, req, f)
+	case "del-session":
+		p.delSession(w, req, f)
+	case "echo":
+		w.Header().Set("content-type", req.Header.Get("content-type"))
+		w.Write(data)
+	default:
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
