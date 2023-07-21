@@ -92,7 +92,7 @@ local xelatex = {
 
         local args = {'-halt-on-error', '-no-pdf', 'draw.tex'}
         pandoc.pipe('xelatex', args, '')
-        pandoc.pipe('dvisvgm', {'draw.xdv'}, '')
+        pandoc.pipe('dvisvgm', {'draw.xdv', '-o', '%f'}, '')
 
         return read_file('draw.svg')
       end)
