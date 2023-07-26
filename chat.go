@@ -265,25 +265,16 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
-type cancelArgs struct {
-	ChatID  string    `json:"chat_id"`
-	UserID  int       `json:"user_id"`
-	Created time.Time `json:"created"`
-	Sign    string    `json:"sign"`
-}
-
 func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	var args cancelArgs
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
+	var args struct {
+		ChatID  string    `json:"chat_id"`
+		UserID  int       `json:"user_id"`
+		Created time.Time `json:"created"`
+		Sign    string    `json:"sign"`
+	}
 
-	if err := json.Unmarshal(body, &args); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -671,24 +662,15 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 	w.Write([]byte("success"))
 }
 
-type tokenLogArgs struct {
-	TradeNo string    `json:"trade_no"`
-	Sign    string    `json:"sign"`
-	Pubkey  string    `json:"pubkey"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenLogArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		TradeNo string    `json:"trade_no"`
+		Sign    string    `json:"sign"`
+		Pubkey  string    `json:"pubkey"`
+		Created time.Time `json:"created"`
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -734,24 +716,16 @@ func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHa
 	w.Write(b)
 }
 
-type tokenLogsArgs struct {
-	UserID  int       `json:"user_id"`
-	LastID  int       `json:"last_id"`
-	Sign    string    `json:"sign"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenLogsArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		UserID  int       `json:"user_id"`
+		LastID  int       `json:"last_id"`
+		Sign    string    `json:"sign"`
+		Created time.Time `json:"created"`
+	}{}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -813,23 +787,14 @@ func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileH
 	w.Write(b)
 }
 
-type tokenWalletArgs struct {
-	Sign    string    `json:"sign"`
-	Pubkey  string    `json:"pubkey"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenWalletArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		Sign    string    `json:"sign"`
+		Pubkey  string    `json:"pubkey"`
+		Created time.Time `json:"created"`
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
