@@ -24,6 +24,29 @@ import (
 
 const utcTime = "2006-01-02T15:04:05.000Z"
 
+func (p *Proxy) getWallet(wid int, req *http.Request) (w store.TokenWallet, err error) {
+	w, err = p.TokenRepo.GetWallet(wid)
+	if err != nil || w.ID == 0 {
+		return
+	}
+	c, err := req.Cookie("sid")
+	if err != nil {
+		err = nil
+		return
+	}
+	i, err := strconv.Atoi(c.Value)
+	if err != nil {
+		err = nil
+		return
+	}
+	s, err := p.TokenRepo.GetSession(i)
+	if err != nil {
+		return
+	}
+	w.Pubkey = s.Pubkey
+	return
+}
+
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
 
@@ -53,7 +76,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
-	wallet, err := p.TokenRepo.GetWallet(msg.UserID)
+	wallet, err := p.getWallet(msg.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -280,7 +303,7 @@ func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHand
 		return
 	}
 
-	wallet, err := p.TokenRepo.GetWallet(args.UserID)
+	wallet, err := p.getWallet(args.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -542,7 +565,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 
 	var pk ecdsa.PublicKey
 	if args.UserID != 0 {
-		u, err := p.TokenRepo.GetWallet(args.UserID)
+		u, err := p.getWallet(args.UserID, req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -737,7 +760,7 @@ func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileH
 		return
 	}
 
-	u, err := p.TokenRepo.GetWallet(args.UserID)
+	u, err := p.getWallet(args.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("client time is inaccurate"))
@@ -823,7 +846,28 @@ func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
-	u, err := p.TokenRepo.FindWallet(ecdsa.Compress(pk))
+	var u store.TokenWallet
+	if c, err := req.Cookie("sid"); err == nil {
+		i, err := strconv.Atoi(c.Value)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		s, err := p.TokenRepo.GetSession(i)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		if s.Pubkey != ecdsa.Compress(pk) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		u, err = p.TokenRepo.GetWallet(s.UserID)
+	} else {
+		u, err = p.TokenRepo.FindWallet(ecdsa.Compress(pk))
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
