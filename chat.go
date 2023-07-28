@@ -91,10 +91,17 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
+	// 会话过期
+	if wallet.Pubkey == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	pk, err := wallet.GetPubkey()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
+		return
 	}
 
 	var buf bytes.Buffer
@@ -395,8 +402,12 @@ func (p *Proxy) setAuth(w http.ResponseWriter, req *http.Request, f *FileHandler
 		return
 	}
 
-	// 验签通过则用户必存在
-	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+	uid, err := strconv.Atoi(req.Header.Get("cg-uid"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("用户不存在"))
+		return
+	}
 	wallet, err := p.TokenRepo.GetWallet(uid)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -465,8 +476,8 @@ func (p *Proxy) login(w http.ResponseWriter, req *http.Request, f *FileHandler) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte("{" +
-		"\"sid\":\"" + strconv.Itoa(s.ID) + "\"," +
-		"\"uid\":\"" + strconv.Itoa(s.UserID) + "\"" +
+		"\"sid\":" + strconv.Itoa(s.ID) + "," +
+		"\"uid\":" + strconv.Itoa(s.UserID) +
 		"}"))
 }
 
