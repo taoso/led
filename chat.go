@@ -82,12 +82,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		w.Write([]byte(err.Error()))
 		return
 	} else if wallet.ID == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("user_id not found"))
-		return
-	} else if wallet.Tokens <= 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("token is not enough"))
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
@@ -149,7 +144,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 	if t := tokenRate * 100; wallet.Tokens < t {
 		w.WriteHeader(http.StatusPaymentRequired)
-		w.Write([]byte("Token 不足 " + strconv.Itoa(t)))
+		w.Write([]byte(strconv.Itoa(t)))
 		return
 	}
 
