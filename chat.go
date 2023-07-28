@@ -51,10 +51,11 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
 
 	type chatmsg struct {
-		Messages []map[string]string `json:"messages"`
-		Model    string              `json:"model"`
-		Stream   bool                `json:"stream"`
-		User     string              `json:"user"`
+		Messages  []map[string]string `json:"messages"`
+		Model     string              `json:"model"`
+		Stream    bool                `json:"stream"`
+		User      string              `json:"user"`
+		MaxTokens int                 `json:"max_tokens"`
 	}
 
 	var msg struct {
@@ -123,29 +124,32 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 	msg.Stream = true
 	var tokenRate int
+	var maxTokens int
 	switch msg.Model {
-	case "3.5-8k", "", "gpt-3.5-turbo":
+	case "3.5-8k", "", "gpt-3.5-turbo", "3.5-4k":
 		tokenRate = 1
 		msg.Model = "gpt-3.5-turbo"
+		maxTokens = 4 * 1024
 	case "3.5-16k":
 		tokenRate = 2
 		msg.Model = "gpt-3.5-turbo-16k"
+		maxTokens = 16 * 1024
 	case "4.0-8k":
 		tokenRate = 30
 		msg.Model = "gpt-4"
+		maxTokens = 8 * 1024
 	// case "4.0-32k":
 	// 	tokenRate = 60
 	// 	msg.Model = "gpt-4-32k"
+	//	maxTokens = 32 * 1024
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid model"))
 		return
 	}
 
-	if t := tokenRate * 100; wallet.Tokens < t {
-		w.WriteHeader(http.StatusPaymentRequired)
-		w.Write([]byte(strconv.Itoa(t)))
-		return
+	if t := int(float64(wallet.Tokens) / float64(tokenRate)); t < maxTokens {
+		maxTokens = t
 	}
 
 	var u struct {
@@ -193,6 +197,14 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}()
 
 	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
+
+	if maxTokens <= u.Usage.PromptTokens {
+		w.WriteHeader(http.StatusPaymentRequired)
+		w.Write([]byte(strconv.Itoa(tokenRate * u.Usage.PromptTokens)))
+		return
+	}
+
+	msg.chatmsg.MaxTokens = maxTokens - u.Usage.PromptTokens
 
 	msg.User = strconv.Itoa(msg.UserID)
 
