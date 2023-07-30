@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kiss/sqlx"
 	"github.com/taoso/led/ecdsa"
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -23,20 +24,56 @@ var (
 type LogType int
 
 const (
-	LogTypeBuy LogType = iota
-	LogTypeCost
-	LogTypeRefund
+	LogTypeBuy    = LogType(0)
+	LogTypeCost   = LogType(1)
+	LogTypeRefund = LogType(2)
+	LogTypeInvite = LogType(3)
 )
 
 type TokenRepo struct {
 	db *sqlx.DB
 }
 
+type Session struct {
+	ID      int       `db:"id"`      // 会话编号
+	UserID  int       `db:"user_id"` // 用户编号
+	Pubkey  string    `db:"pubkey"`  // 用户签名公钥 P-256 ECDSA，压缩，base64
+	Agent   string    `db:"agent"`   // 用户 User-Agent
+	Address string    `db:"address"` // 登录时的 IP:Port
+	Created time.Time `db:"created"` // 创建时间
+}
+
+func (s *Session) GetPubkey() (ecdsa.PublicKey, error) {
+	return ecdsa.GetPubkey(s.Pubkey)
+}
+
+func (_ *Session) KeyName() string   { return "id" }
+func (_ *Session) TableName() string { return "sessions" }
+func (s *Session) Schema() string {
+	return `CREATE TABLE ` + s.TableName() + `(
+	` + s.KeyName() + ` INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER,
+	pubkey TEXT,
+	agent TEXT,
+	address TEXT,
+	created DATETIME
+); 
+	CREATE INDEX s_user_id ON ` + s.TableName() + `(user_id);
+	CREATE UNIQUE INDEX s_pubkey ON ` + s.TableName() + `(pubkey);`
+}
+
 type TokenWallet struct {
 	ID     int    `db:"id"`     // 钱包编号
 	Tokens int    `db:"tokens"` // Token 余额
 	Pubkey string `db:"pubkey"` // 用户签名公钥 P-256 ECDSA，压缩，base64
-	Extra  KV     `db:"extra"`  // 扩展信息，如支付宝ID等
+
+	Username string `db:"username"`          // 登录名字
+	Password []byte `db:"password" json:"-"` // 登录密码
+	Extra    KV     `db:"extra" json:"-"`    // 扩展信息，如支付宝ID等
+	FromID   int    `db:"from_id"`           // 邀请我的人
+
+	InviteTokens int `db:"invite_tokens"` // 我邀请的奖励
+	InviteUsers  int `db:"invite_users"`  // 我邀请的人数
 
 	Created time.Time `db:"created"` // 创建时间
 	Updated time.Time `db:"updated"` // 更新时间
@@ -50,14 +87,29 @@ func (w *TokenWallet) Schema() string {
     	tokens INTEGER,
     	pubkey TEXT,
     	extra TEXT,
+	username TEXT default '',
+	password BLOB default '',
+	from_id INTEGER default 0,
+	invite_tokens INTEGER default 0,
+	invite_users INTEGER default 0,
     	created DATETIME,
     	updated DATETIME
 ); 
+	CREATE INDEX w_from_id ON ` + w.TableName() + `(from_id);
 	CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
 }
 
 func (w *TokenWallet) GetPubkey() (ecdsa.PublicKey, error) {
 	return ecdsa.GetPubkey(w.Pubkey)
+}
+
+func (w *TokenWallet) SetPassword(value string) (err error) {
+	w.Password, err = bcrypt.GenerateFromPassword([]byte(value), 16)
+	return
+}
+
+func (w *TokenWallet) CheckPassword(value string) bool {
+	return bcrypt.CompareHashAndPassword(w.Password, []byte(value)) == nil
 }
 
 type KV map[string]string
@@ -137,13 +189,20 @@ func NewTokenRepo(path string) *TokenRepo {
 }
 
 func (r *TokenRepo) Init() error {
-	s1 := (*TokenWallet).Schema(nil)
-	_, err := r.db.Exec(s1)
+	_, err := r.db.Exec((*TokenWallet).Schema(nil))
 	if err != nil {
+		panic(err)
 		return err
 	}
-	s2 := (*TokenLog).Schema(nil)
-	_, err = r.db.Exec(s2)
+	_, err = r.db.Exec((*TokenLog).Schema(nil))
+	if err != nil {
+		panic(err)
+		return err
+	}
+	_, err = r.db.Exec((*Session).Schema(nil))
+	if err != nil {
+		panic(err)
+	}
 	return err
 }
 
@@ -155,11 +214,74 @@ func (r *TokenRepo) FindWallet(pubkey string) (w TokenWallet, err error) {
 	return
 }
 
+func (r *TokenRepo) FindWalletByName(username string) (w TokenWallet, err error) {
+	err = r.db.Get(&w, "select * from "+w.TableName()+" where username = ?", username)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+
+func (r *TokenRepo) GetSession(id int) (s Session, err error) {
+	err = r.db.Get(&s, "select * from "+s.TableName()+" where id = ?", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+
+func (r *TokenRepo) FindWalletBySession(id int) (w TokenWallet, err error) {
+	var s Session
+	err = r.db.Get(&s, "select * from "+s.TableName()+" where id = ?", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	if err != nil {
+		return
+	}
+	w, err = r.GetWallet(s.UserID)
+	if err != nil {
+		return
+	}
+	w.Pubkey = s.Pubkey
+	return
+}
+
 func (r *TokenRepo) GetWallet(id int) (w TokenWallet, err error) {
 	err = r.db.Get(&w, "select * from "+w.TableName()+" where id = ?", id)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 	}
+	return
+}
+
+func (r *TokenRepo) SaveWallet(w TokenWallet) error {
+	w.Updated = time.Now()
+	_, err := r.db.Update(&w)
+	return err
+}
+
+func (r *TokenRepo) AddSession(s *Session) error {
+	s.Created = time.Now()
+	x, err := r.db.Insert(s)
+	if err != nil {
+		return err
+	}
+	id, err := x.LastInsertId()
+	if err != nil {
+		return err
+	}
+	s.ID = int(id)
+	return nil
+}
+
+func (r *TokenRepo) ListSession(uid int) (s []Session, err error) {
+	err = r.db.Select(&s, "select * from "+(&Session{}).TableName()+" where user_id = ?", uid)
+	return
+}
+
+func (r *TokenRepo) DelSession(id, uid int) (err error) {
+	_, err = r.db.Exec("delete from "+(&Session{}).TableName()+" where id = ? and user_id = ?", id, uid)
 	return
 }
 
@@ -210,6 +332,11 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 			Created: now,
 			Updated: now,
 		}
+		if f := log.Extra["_from_id"]; f != "" {
+			if i, err := strconv.Atoi(f); err == nil {
+				w.FromID = i
+			}
+		}
 		if err = r.newWallet(tx, &w); err != nil {
 			return
 		}
@@ -243,8 +370,11 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 	}
 	log.AfterNum = w.Tokens
 
-	delete(log.Extra, "_pubkey")
-	delete(log.Extra, "_buyer_id")
+	for k := range log.Extra {
+		if strings.HasPrefix(k, "_") {
+			delete(log.Extra, k)
+		}
+	}
 
 	res, err := tx.Insert(log)
 	if err != nil {
@@ -256,6 +386,41 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		err = fmt.Errorf("%v %w", err, ServerErr)
 		return
 	}
+
+	if log.Type == LogTypeBuy && w.FromID > 0 {
+		var fw TokenWallet
+		fw, err = r.GetWallet(w.FromID)
+		if err != nil {
+			err = fmt.Errorf("%v %w", err, ServerErr)
+			return
+		}
+		if fw.ID != 0 {
+			t := log.TokenNum / 10
+			fw.Tokens += t
+			fw.InviteUsers += 1
+			fw.InviteTokens += t
+			if _, err = tx.Update(&fw); err != nil {
+				err = fmt.Errorf("%v %w", err, ServerErr)
+				return
+			}
+			fo := TokenLog{
+				UserID:   fw.ID,
+				Type:     LogTypeInvite,
+				TokenNum: t,
+				AfterNum: fw.Tokens,
+				Extra: map[string]string{
+					"from_id":  strconv.Itoa(w.ID),
+					"from_oid": strconv.FormatInt(id, 10),
+				},
+				Created: log.Created,
+			}
+			if _, err = tx.Insert(&fo); err != nil {
+				err = fmt.Errorf("%v %w", err, ServerErr)
+				return
+			}
+		}
+	}
+
 	if err = tx.Commit(); err == nil {
 		log.ID = int(id)
 		return

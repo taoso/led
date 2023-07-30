@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,14 +22,40 @@ import (
 	"github.com/taoso/led/store"
 )
 
+const utcTime = "2006-01-02T15:04:05.000Z"
+
+func (p *Proxy) getWallet(wid int, req *http.Request) (w store.TokenWallet, err error) {
+	w, err = p.TokenRepo.GetWallet(wid)
+	if err != nil || w.ID == 0 {
+		return
+	}
+	c, err := req.Cookie("sid")
+	if err != nil {
+		err = nil
+		return
+	}
+	i, err := strconv.Atoi(c.Value)
+	if err != nil {
+		err = nil
+		return
+	}
+	s, err := p.TokenRepo.GetSession(i)
+	if err != nil {
+		return
+	}
+	w.Pubkey = s.Pubkey
+	return
+}
+
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
 
 	type chatmsg struct {
-		Messages []map[string]string `json:"messages"`
-		Model    string              `json:"model"`
-		Stream   bool                `json:"stream"`
-		User     string              `json:"user"`
+		Messages  []map[string]string `json:"messages"`
+		Model     string              `json:"model"`
+		Stream    bool                `json:"stream"`
+		User      string              `json:"user"`
+		MaxTokens int                 `json:"max_tokens"`
 	}
 
 	var msg struct {
@@ -50,18 +77,19 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
-	wallet, err := p.TokenRepo.GetWallet(msg.UserID)
+	wallet, err := p.getWallet(msg.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	} else if wallet.ID == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("user_id not found"))
+		w.WriteHeader(http.StatusUnauthorized)
 		return
-	} else if wallet.Tokens <= 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("token is not enough"))
+	}
+
+	// 会话过期
+	if wallet.Pubkey == "" {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
@@ -69,6 +97,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
+		return
 	}
 
 	var buf bytes.Buffer
@@ -78,6 +107,9 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 	buf.WriteString(strconv.Itoa(msg.UserID))
 	buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+	if msg.Model != "gpt-3.5-turbo" {
+		buf.WriteString(msg.Model)
+	}
 
 	ok, hash, err := ecdsa.VerifyES256(buf.String(), msg.Sign, pk)
 	if err != nil {
@@ -91,7 +123,34 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 
 	msg.Stream = true
-	msg.Model = "gpt-3.5-turbo"
+	var tokenRate int
+	var maxTokens int
+	switch msg.Model {
+	case "3.5-8k", "", "gpt-3.5-turbo", "3.5-4k":
+		tokenRate = 1
+		msg.Model = "gpt-3.5-turbo"
+		maxTokens = 4 * 1024
+	case "3.5-16k":
+		tokenRate = 2
+		msg.Model = "gpt-3.5-turbo-16k"
+		maxTokens = 16 * 1024
+	case "4.0-8k":
+		tokenRate = 30
+		msg.Model = "gpt-4"
+		maxTokens = 8 * 1024
+	// case "4.0-32k":
+	// 	tokenRate = 60
+	// 	msg.Model = "gpt-4-32k"
+	//	maxTokens = 32 * 1024
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid model"))
+		return
+	}
+
+	if t := int(float64(wallet.Tokens) / float64(tokenRate)); t < maxTokens {
+		maxTokens = t
+	}
 
 	var u struct {
 		Usage struct {
@@ -99,19 +158,25 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 			PromptTokens int `json:"prompt_tokens"`
 			TotalTokens  int `json:"total_tokens"`
 			RemainTokens int `json:"remain_tokens"`
+			TokenRate    int `json:"token_rate"`
 		} `json:"usage"`
 	}
 
 	var chatID string
 
 	defer func() {
-		if msg.Stream && u.Usage.TotalTokens > u.Usage.PromptTokens {
+		if msg.Stream && u.Usage.ReplyTokens > 0 {
+			u.Usage.TokenRate = tokenRate
+			u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
+
 			tl := store.TokenLog{
 				UserID:   msg.UserID,
 				Type:     store.LogTypeCost,
-				TokenNum: u.Usage.TotalTokens,
+				TokenNum: u.Usage.TotalTokens * tokenRate,
 				Extra: map[string]string{
 					"chatid":        chatID,
+					"model":         msg.Model,
+					"token_rate":    strconv.Itoa(tokenRate),
 					"sha256":        hex.EncodeToString(hash[:]),
 					"prompt_tokens": strconv.Itoa(u.Usage.PromptTokens),
 				},
@@ -132,7 +197,14 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}()
 
 	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
-	u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
+
+	if maxTokens <= u.Usage.PromptTokens {
+		w.WriteHeader(http.StatusPaymentRequired)
+		w.Write([]byte(strconv.Itoa(tokenRate * u.Usage.PromptTokens)))
+		return
+	}
+
+	msg.chatmsg.MaxTokens = maxTokens - u.Usage.PromptTokens
 
 	msg.User = strconv.Itoa(msg.UserID)
 
@@ -205,7 +277,6 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 		for _, c := range data.Choices {
 			u.Usage.ReplyTokens += p.BPE.Count(c.Delta.Content)
-			u.Usage.TotalTokens = u.Usage.PromptTokens + u.Usage.ReplyTokens
 		}
 
 		b, err := json.Marshal(data)
@@ -231,31 +302,22 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
-type cancelArgs struct {
-	ChatID  string    `json:"chat_id"`
-	UserID  int       `json:"user_id"`
-	Created time.Time `json:"created"`
-	Sign    string    `json:"sign"`
-}
-
 func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	var args cancelArgs
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
+	var args struct {
+		ChatID  string    `json:"chat_id"`
+		UserID  int       `json:"user_id"`
+		Created time.Time `json:"created"`
+		Sign    string    `json:"sign"`
+	}
 
-	if err := json.Unmarshal(body, &args); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	wallet, err := p.TokenRepo.GetWallet(args.UserID)
+	wallet, err := p.getWallet(args.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -299,6 +361,168 @@ func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHand
 	p.chatLinks.Delete(linkKey)
 }
 
+func (p *Proxy) checkName(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	u, err := p.TokenRepo.FindWalletByName(args.Name)
+	if err != nil {
+		return
+	}
+	if u.ID != 0 {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte("用户名已存在"))
+		return
+	}
+
+	w.Write([]byte("ok"))
+}
+
+var usernameRE = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
+
+func (p *Proxy) setAuth(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if !usernameRE.MatchString(args.Username) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid username"))
+		return
+	}
+	if args.Password == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid password"))
+		return
+	}
+
+	uid, err := strconv.Atoi(req.Header.Get("cg-uid"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("用户不存在"))
+		return
+	}
+	wallet, err := p.TokenRepo.GetWallet(uid)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if u, err := p.TokenRepo.FindWalletByName(args.Username); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	} else if u.ID != 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("用户名已存在"))
+		return
+	}
+
+	wallet.Username = args.Username
+	wallet.SetPassword(args.Password)
+
+	if err = p.TokenRepo.SaveWallet(wallet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+	w.Write([]byte("ok"))
+}
+
+func (p *Proxy) login(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	u, err := p.TokenRepo.FindWalletByName(args.Username)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	// 同时检查用户不存在的情形
+	if !u.CheckPassword(args.Password) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	s := store.Session{
+		UserID:  u.ID,
+		Pubkey:  req.Header.Get("cg-pubk"),
+		Agent:   req.UserAgent(),
+		Address: req.RemoteAddr,
+		Created: time.Now(),
+	}
+
+	if err = p.TokenRepo.AddSession(&s); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte("{" +
+		"\"sid\":" + strconv.Itoa(s.ID) + "," +
+		"\"uid\":" + strconv.Itoa(s.UserID) +
+		"}"))
+}
+
+func (p *Proxy) listSession(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+
+	ss, err := p.TokenRepo.ListSession(uid)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(ss); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+}
+
+func (p *Proxy) delSession(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+	var args struct {
+		ID int `json:"id"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	uid, _ := strconv.Atoi(req.Header.Get("cg-uid"))
+
+	if err := p.TokenRepo.DelSession(args.ID, uid); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write([]byte("ok"))
+}
+
 type alipayArgs struct {
 	UserID   int       `json:"user_id"`
 	TokenNum int       `json:"token_num"`
@@ -306,6 +530,7 @@ type alipayArgs struct {
 	Sign     string    `json:"sign"`
 	Pubkey   string    `json:"pubkey"`
 	Created  time.Time `json:"created"`
+	FromID   string    `json:"from_id"`
 }
 
 const tokenPrice = 5
@@ -313,14 +538,8 @@ const tokenPrice = 5
 func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	args := alipayArgs{}
 
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -357,9 +576,10 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		Created:  args.Created,
 	}
 
+	var err error
 	var pk ecdsa.PublicKey
 	if args.UserID != 0 {
-		u, err := p.TokenRepo.GetWallet(args.UserID)
+		u, err := p.getWallet(args.UserID, req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -386,6 +606,11 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		return
 	}
 
+	if f, err := req.Cookie("from"); err == nil {
+		args.FromID = f.Value
+	}
+
+	body, _ := json.Marshal(args)
 	order := pay.Order{
 		TradeNo:   genTradeNo(pk),
 		Amount:    strconv.Itoa(args.CentNum / 100),
@@ -446,9 +671,8 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
-	l, err := p.TokenRepo.FindLog(trade.OutTradeNo)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if l, err := p.TokenRepo.FindLog(trade.OutTradeNo); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	} else if l.ID != 0 {
@@ -466,6 +690,7 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 			"trade_no":  trade.TradeNo,
 			"_buyer_id": trade.BuyerId,
 			"_pubkey":   ecdsa.Compress(pk),
+			"_from_id":  args.FromID,
 		},
 		Sign:    args.Sign,
 		Created: args.Created,
@@ -480,24 +705,15 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 	w.Write([]byte("success"))
 }
 
-type tokenLogArgs struct {
-	TradeNo string    `json:"trade_no"`
-	Sign    string    `json:"sign"`
-	Pubkey  string    `json:"pubkey"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenLogArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		TradeNo string    `json:"trade_no"`
+		Sign    string    `json:"sign"`
+		Pubkey  string    `json:"pubkey"`
+		Created time.Time `json:"created"`
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -543,24 +759,16 @@ func (p *Proxy) buyTokensLog(w http.ResponseWriter, req *http.Request, f *FileHa
 	w.Write(b)
 }
 
-type tokenLogsArgs struct {
-	UserID  int       `json:"user_id"`
-	LastID  int       `json:"last_id"`
-	Sign    string    `json:"sign"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenLogsArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		UserID  int       `json:"user_id"`
+		LastID  int       `json:"last_id"`
+		Sign    string    `json:"sign"`
+		Created time.Time `json:"created"`
+	}{}
+
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -572,7 +780,7 @@ func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileH
 		return
 	}
 
-	u, err := p.TokenRepo.GetWallet(args.UserID)
+	u, err := p.getWallet(args.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("client time is inaccurate"))
@@ -622,23 +830,14 @@ func (p *Proxy) buyTokensLogs(w http.ResponseWriter, req *http.Request, f *FileH
 	w.Write(b)
 }
 
-type tokenWalletArgs struct {
-	Sign    string    `json:"sign"`
-	Pubkey  string    `json:"pubkey"`
-	Created time.Time `json:"created"`
-}
-
 func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	args := tokenWalletArgs{}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	args := struct {
+		Sign    string    `json:"sign"`
+		Pubkey  string    `json:"pubkey"`
+		Created time.Time `json:"created"`
+	}{}
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -667,7 +866,28 @@ func (p *Proxy) buyTokensWallet(w http.ResponseWriter, req *http.Request, f *Fil
 		return
 	}
 
-	u, err := p.TokenRepo.FindWallet(ecdsa.Compress(pk))
+	var u store.TokenWallet
+	if c, err := req.Cookie("sid"); err == nil {
+		i, err := strconv.Atoi(c.Value)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		s, err := p.TokenRepo.GetSession(i)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		if s.Pubkey != ecdsa.Compress(pk) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		u, err = p.TokenRepo.GetWallet(s.UserID)
+	} else {
+		u, err = p.TokenRepo.FindWallet(ecdsa.Compress(pk))
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
