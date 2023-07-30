@@ -24,9 +24,10 @@ var (
 type LogType int
 
 const (
-	LogTypeBuy LogType = iota
-	LogTypeCost
-	LogTypeRefund
+	LogTypeBuy    = LogType(0)
+	LogTypeCost   = LogType(1)
+	LogTypeRefund = LogType(2)
+	LogTypeInvite = LogType(3)
 )
 
 type TokenRepo struct {
@@ -65,10 +66,14 @@ type TokenWallet struct {
 	ID     int    `db:"id"`     // 钱包编号
 	Tokens int    `db:"tokens"` // Token 余额
 	Pubkey string `db:"pubkey"` // 用户签名公钥 P-256 ECDSA，压缩，base64
-	Extra  KV     `db:"extra"`  // 扩展信息，如支付宝ID等
 
 	Username string `db:"username"`          // 登录名字
 	Password []byte `db:"password" json:"-"` // 登录密码
+	Extra    KV     `db:"extra" json:"-"`    // 扩展信息，如支付宝ID等
+	FromID   int    `db:"from_id"`           // 邀请我的人
+
+	InviteTokens int `db:"invite_tokens"` // 我邀请的奖励
+	InviteUsers  int `db:"invite_users"`  // 我邀请的人数
 
 	Created time.Time `db:"created"` // 创建时间
 	Updated time.Time `db:"updated"` // 更新时间
@@ -82,11 +87,15 @@ func (w *TokenWallet) Schema() string {
     	tokens INTEGER,
     	pubkey TEXT,
     	extra TEXT,
-	username TEXT,
-	password BLOB,
+	username TEXT default '',
+	password BLOB default '',
+	from_id INTEGER default 0,
+	invite_tokens INTEGER default 0,
+	invite_users INTEGER default 0,
     	created DATETIME,
     	updated DATETIME
 ); 
+	CREATE INDEX w_from_id ON ` + w.TableName() + `(from_id);
 	CREATE UNIQUE INDEX pubkey ON ` + w.TableName() + `(pubkey);`
 }
 
@@ -323,6 +332,11 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 			Created: now,
 			Updated: now,
 		}
+		if f := log.Extra["_from_id"]; f != "" {
+			if i, err := strconv.Atoi(f); err == nil {
+				w.FromID = i
+			}
+		}
 		if err = r.newWallet(tx, &w); err != nil {
 			return
 		}
@@ -356,8 +370,11 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 	}
 	log.AfterNum = w.Tokens
 
-	delete(log.Extra, "_pubkey")
-	delete(log.Extra, "_buyer_id")
+	for k := range log.Extra {
+		if strings.HasPrefix(k, "_") {
+			delete(log.Extra, k)
+		}
+	}
 
 	res, err := tx.Insert(log)
 	if err != nil {
@@ -369,6 +386,41 @@ func (r *TokenRepo) UpdateWallet(log *TokenLog) (w TokenWallet, err error) {
 		err = fmt.Errorf("%v %w", err, ServerErr)
 		return
 	}
+
+	if log.Type == LogTypeBuy && w.FromID > 0 {
+		var fw TokenWallet
+		fw, err = r.GetWallet(w.FromID)
+		if err != nil {
+			err = fmt.Errorf("%v %w", err, ServerErr)
+			return
+		}
+		if fw.ID != 0 {
+			t := log.TokenNum / 10
+			fw.Tokens += t
+			fw.InviteUsers += 1
+			fw.InviteTokens += t
+			if _, err = tx.Update(&fw); err != nil {
+				err = fmt.Errorf("%v %w", err, ServerErr)
+				return
+			}
+			fo := TokenLog{
+				UserID:   fw.ID,
+				Type:     LogTypeInvite,
+				TokenNum: t,
+				AfterNum: fw.Tokens,
+				Extra: map[string]string{
+					"from_id":  strconv.Itoa(w.ID),
+					"from_oid": strconv.FormatInt(id, 10),
+				},
+				Created: log.Created,
+			}
+			if _, err = tx.Insert(&fo); err != nil {
+				err = fmt.Errorf("%v %w", err, ServerErr)
+				return
+			}
+		}
+	}
+
 	if err = tx.Commit(); err == nil {
 		log.ID = int(id)
 		return

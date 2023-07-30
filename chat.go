@@ -530,6 +530,7 @@ type alipayArgs struct {
 	Sign     string    `json:"sign"`
 	Pubkey   string    `json:"pubkey"`
 	Created  time.Time `json:"created"`
+	FromID   string    `json:"from_id"`
 }
 
 const tokenPrice = 5
@@ -537,14 +538,8 @@ const tokenPrice = 5
 func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	args := alipayArgs{}
 
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 	defer req.Body.Close()
-	if err := json.Unmarshal(body, &args); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&args); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -581,6 +576,7 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		Created:  args.Created,
 	}
 
+	var err error
 	var pk ecdsa.PublicKey
 	if args.UserID != 0 {
 		u, err := p.getWallet(args.UserID, req)
@@ -610,6 +606,11 @@ func (p *Proxy) buyTokens(w http.ResponseWriter, req *http.Request, f *FileHandl
 		return
 	}
 
+	if f, err := req.Cookie("from"); err == nil {
+		args.FromID = f.Value
+	}
+
+	body, _ := json.Marshal(args)
 	order := pay.Order{
 		TradeNo:   genTradeNo(pk),
 		Amount:    strconv.Itoa(args.CentNum / 100),
@@ -689,6 +690,7 @@ func (p *Proxy) buyTokensNotify(w http.ResponseWriter, req *http.Request, f *Fil
 			"trade_no":  trade.TradeNo,
 			"_buyer_id": trade.BuyerId,
 			"_pubkey":   ecdsa.Compress(pk),
+			"_from_id":  args.FromID,
 		},
 		Sign:    args.Sign,
 		Created: args.Created,
