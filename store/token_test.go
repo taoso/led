@@ -146,3 +146,54 @@ func TestSignData(t *testing.T) {
 	}
 	assert.Equal(t, nows+":2:1000:20", l3.SignData())
 }
+
+func TestSession(t *testing.T) {
+	f, err := os.CreateTemp("", "led-*.db")
+	assert.Nil(t, err)
+	f.Close()
+	defer os.Remove(f.Name())
+
+	repo := NewTokenRepo(f.Name())
+	err = repo.Init()
+	assert.Nil(t, err)
+
+	l1 := TokenLog{
+		Type:     LogTypeBuy,
+		TokenNum: 1000,
+		ExtraNum: 20,
+		Extra: KV{
+			"_pubkey":   "foo",
+			"_buyer_id": "123",
+		},
+		Sign:    "my sign",
+		Created: time.Now(),
+	}
+
+	w, err := repo.UpdateWallet(&l1)
+	assert.Nil(t, err)
+
+	w.Username = "bob"
+	w.SetPassword("alice")
+
+	err = repo.SaveWallet(w)
+	assert.Nil(t, err)
+
+	w, err = repo.GetWallet(w.ID)
+	assert.Nil(t, err)
+	assert.Equal(t, "bob", w.Username)
+	assert.True(t, w.CheckPassword("alice"))
+
+	s1 := Session{
+		UserID:  w.ID,
+		Pubkey:  "bar",
+		Agent:   "curl",
+		Address: "1.1.1.1:1",
+	}
+	err = repo.AddSession(&s1)
+	assert.Nil(t, err)
+
+	w2, err := repo.FindWalletBySession(s1.ID)
+	assert.Nil(t, err)
+	assert.Equal(t, w.ID, w2.ID)
+	assert.Equal(t, s1.Pubkey, w2.Pubkey)
+}
