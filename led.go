@@ -82,6 +82,7 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
+	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
 	fs := p.sites.Load().(map[string]*FileHandler)
 	if f := fs[p.host(req)]; f != nil {
