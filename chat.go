@@ -135,7 +135,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		msg.Model = "gpt-3.5-turbo-16k"
 		maxTokens = 16 * 1024
 	case "4.0-8k":
-		tokenRate = 30
+		tokenRate = 20
 		msg.Model = "gpt-4"
 		maxTokens = 8 * 1024
 	// case "4.0-32k":
