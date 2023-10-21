@@ -2,6 +2,7 @@ package led
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"io"
 	"log"
@@ -13,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
@@ -254,7 +257,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodConnect {
-		proxyHTTPS(w, req)
+		if req.Proto == "connect-udp" {
+			proxyUDP(w, req)
+		} else {
+			proxyHTTPS(w, req)
+		}
 	} else {
 		proxyHTTP(w, req)
 	}
@@ -358,6 +365,71 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		w.Write(data)
 	default:
 		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func proxyUDP(w http.ResponseWriter, req *http.Request) {
+	if req.ProtoMajor < 3 {
+		http.Error(w, "Only support HTTP/3", http.StatusHTTPVersionNotSupported)
+		return
+	}
+
+	hj, ok := w.(http3.Hijacker)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("cannot hijack http3"))
+		return
+	}
+
+	addr, err := parseMasqueTarget(req.URL)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid target"))
+		return
+	}
+
+	up, err := net.Dial("udp", addr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("dial udp err: " + err.Error()))
+		return
+	}
+	defer up.Close()
+
+	w.Header().Add("capsule-protocol", "?1")
+	w.WriteHeader(http.StatusOK)
+
+	qc := hj.StreamCreator().(quic.Connection)
+	defer qc.CloseWithError(0, "")
+
+	go func() {
+		b := make([]byte, 1500)
+		for {
+			// skip the leading context id of (0)
+			n, err := up.Read(b[1:])
+			if err != nil {
+				return
+			}
+			err = qc.SendDatagram(b[n:])
+			if err != nil {
+				return
+			}
+
+		}
+	}()
+
+	ctx := context.Background()
+
+	for {
+		b, err := qc.ReceiveDatagram(ctx)
+		if err != nil {
+			return
+		}
+		// skip the leading context id of (0)
+		_, err = up.Write(b[1:])
+		if err != nil {
+			return
+		}
 	}
 }
 
