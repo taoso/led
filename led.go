@@ -2,6 +2,7 @@ package led
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"io"
 	"log"
@@ -13,6 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/felixge/httpsnoop"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
@@ -93,6 +97,35 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
+	auth := req.Header.Get("Proxy-Authorization")
+
+	if auth == "" {
+		p.serveLocal(w, req)
+		return
+	}
+
+	username, password, ok := parseBasicAuth(auth)
+	if username != "" {
+		req.URL.User = url.User(username)
+	}
+	if !ok || !p.auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
+		w.WriteHeader(http.StatusProxyAuthRequired)
+		return
+	}
+
+	if req.Method == http.MethodConnect {
+		if req.Proto == "connect-udp" {
+			proxyUDP(w, req)
+		} else {
+			proxyHTTPS(w, req)
+		}
+	} else {
+		proxyHTTP(w, req)
+	}
+}
+
+func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	if f := p.sites[p.host(req)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -231,32 +264,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		f.fs.ServeHTTP(w, req)
 		return
-	}
-
-	auth := req.Header.Get("Proxy-Authorization")
-
-	if auth == "" {
+	} else {
 		if p.defaultSite == nil {
 			p.defaultSite = http.FileServer(http.Dir(p.Root + "/default"))
 		}
 		p.defaultSite.ServeHTTP(w, req)
 		return
-	}
-
-	username, password, ok := parseBasicAuth(auth)
-	if username != "" {
-		req.URL.User = url.User(username)
-	}
-	if !ok || !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
-		w.WriteHeader(http.StatusProxyAuthRequired)
-		return
-	}
-
-	if req.Method == http.MethodConnect {
-		proxyHTTPS(w, req)
-	} else {
-		proxyHTTP(w, req)
 	}
 }
 
@@ -359,6 +372,88 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func proxyUDP(w http.ResponseWriter, req *http.Request) {
+	if req.ProtoMajor < 3 {
+		http.Error(w, "Only support HTTP/3", http.StatusHTTPVersionNotSupported)
+		return
+	}
+
+	addr, err := parseMasqueTarget(req.URL)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid target"))
+		log.Println("invalid target", req.URL)
+		return
+	}
+
+	log.Println("target", addr, req.URL.Path, req.ProtoMajor, req.URL)
+
+	up, err := net.Dial("udp", addr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("dial udp err: " + err.Error()))
+		log.Println("dial udp err", err)
+		return
+	}
+
+	w.Header().Add("capsule-protocol", "?1")
+	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+
+	w = w.(httpsnoop.Unwrapper).Unwrap()
+	hj, ok := w.(http3.Hijacker)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("cannot hijack http3"))
+		log.Println("cannot hijack http3")
+		return
+	}
+
+	qc := hj.StreamCreator().(quic.Connection)
+
+	go func() {
+		defer up.Close()
+		defer qc.CloseWithError(0, "")
+		b := make([]byte, 1500)
+		for {
+			n, err := up.Read(b[1:])
+			if err != nil {
+				log.Println("up.Read err:", err)
+				return
+			}
+			err = qc.SendDatagram(b[:n])
+			if err != nil {
+				log.Println("SendDatagram err:", err)
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer up.Close()
+		defer qc.CloseWithError(0, "")
+		ctx := context.Background()
+
+		for {
+			b, err := qc.ReceiveDatagram(ctx)
+			if err != nil {
+				log.Println("ReceiveDatagram err:", err)
+				return
+			}
+			id, n := parseContextID(b)
+			log.Println("ReceiveDatagram", id, n, b)
+			if id != 0 || n == 0 || len(b)-n == 0 {
+				continue
+			}
+			_, err = up.Write(b[n:])
+			if err != nil {
+				log.Println("up.Write err:", err)
+				return
+			}
+		}
+	}()
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
