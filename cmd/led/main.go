@@ -162,13 +162,16 @@ func main() {
 	}
 
 	tlsCfg := acm.TLSConfig()
-	tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
 
 	if lnH3 != nil {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
 		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, p)
 
-		h3 := http3.Server{Handler: h, TLSConfig: tlsCfg}
+		h3 := http3.Server{
+			Handler:         h,
+			TLSConfig:       tlsCfg,
+			EnableDatagrams: true,
+		}
 		go h3.Serve(lnH3)
 	}
 

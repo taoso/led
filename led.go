@@ -2,6 +2,7 @@ package led
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"io"
 	"log"
@@ -13,6 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/felixge/httpsnoop"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
@@ -124,6 +128,33 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		req.RemoteAddr = ip + ":" + port
 	}
 
+	if p.serveLocal(w, req) {
+		return
+	}
+
+	auth := req.Header.Get("Proxy-Authorization")
+	username, password, ok := parseBasicAuth(auth)
+	if username != "" {
+		req.URL.User = url.User(username)
+	}
+	if !ok || !p.auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
+		w.WriteHeader(http.StatusProxyAuthRequired)
+		return
+	}
+
+	if req.Method == http.MethodConnect {
+		if req.Proto == "connect-udp" {
+			proxyUDP(w, req)
+		} else {
+			p.proxyHTTPS(w, req)
+		}
+	} else {
+		proxyHTTP(w, req)
+	}
+}
+
+func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) (b404 bool) {
 	if f := p.sites[p.host(req.Host)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -274,26 +305,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		f.fs.ServeHTTP(w, req)
-		return
+		return true
 	}
-
-	auth := req.Header.Get("Proxy-Authorization")
-
-	username, password, ok := parseBasicAuth(auth)
-	if username != "" {
-		req.URL.User = url.User(username)
-	}
-	if !ok || !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
-		w.WriteHeader(http.StatusProxyAuthRequired)
-		return
-	}
-
-	if req.Method == http.MethodConnect {
-		p.proxyHTTPS(w, req)
-	} else {
-		proxyHTTP(w, req)
-	}
+	return false
 }
 
 func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
@@ -397,6 +411,77 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
+func proxyUDP(w http.ResponseWriter, req *http.Request) {
+	if req.ProtoMajor < 3 {
+		w.WriteHeader(http.StatusNotImplemented)
+		w.Write([]byte("does not support connect-udp over http/1.1 and h2"))
+		return
+	}
+
+	addr, err := parseMasqueTarget(req.URL)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid target"))
+		log.Println("invalid target", req.URL)
+		return
+	}
+
+	log.Println("target:", req.URL)
+
+	up, err := net.Dial("udp", addr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("dial udp err: " + err.Error()))
+		log.Println("dial udp err", err)
+		return
+	}
+	defer up.Close()
+
+	w.Header().Add("capsule-protocol", "?1")
+	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+
+	w = w.(httpsnoop.Unwrapper).Unwrap()
+	str := w.(http3.HTTPStreamer).HTTPStream()
+	defer str.Close()
+
+	go func() {
+		b := make([]byte, 1500)
+		for {
+			n, err := up.Read(b[1:])
+			if err != nil {
+				log.Println("up.Read err:", err)
+				return
+			}
+			err = str.SendDatagram(b[:n+1])
+			if err != nil {
+				log.Println("SendDatagram err:", err)
+				return
+			}
+		}
+	}()
+
+	ctx := context.Background()
+
+	for {
+		b, err := str.ReceiveDatagram(ctx)
+		if err != nil {
+			log.Println("ReceiveDatagram err:", err)
+			return
+		}
+		_, n, err := quicvarint.Parse(b)
+		if err != nil {
+			log.Println("parse cid err:", err)
+			return
+		}
+		_, err = up.Write(b[n:])
+		if err != nil {
+			log.Println("up.Write err:", err)
+			return
+		}
+	}
+}
+
 func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	address := req.RequestURI
 	upConn, err := net.DialTimeout("tcp", address, 5*time.Second)
@@ -406,14 +491,20 @@ func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	}
 	defer upConn.Close()
 
+	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+
 	var downConn io.ReadWriteCloser
-	if req.ProtoMajor == 2 {
-		w.WriteHeader(http.StatusOK)
-		w.(http.Flusher).Flush()
+	if req.ProtoMajor >= 2 {
 		downConn = flushWriter{w: w, r: req.Body}
 	} else {
 		downConn, _, err = w.(http.Hijacker).Hijack()
-		downConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("hijack err: " + err.Error()))
+			return
+		}
+		defer downConn.Close()
 	}
 
 	var wg sync.WaitGroup
