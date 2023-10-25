@@ -131,6 +131,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if req.RequestURI == "/+/pdf2txt" && req.Method == http.MethodPost {
+			f.pdf2txt(w, req)
+			return
+		}
+
 		if strings.HasPrefix(req.RequestURI, "/+/chat/cancel") && req.Method == http.MethodPost {
 			p.chatCancel(w, req, f)
 			return
