@@ -128,20 +128,20 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	switch msg.Model {
 	case "3.5-8k", "", "gpt-3.5-turbo", "3.5-4k":
 		tokenRate = 1
-		msg.Model = "gpt-3.5-turbo"
+		msg.Model = "gpt-3.5-turbo-1106"
 		maxTokens = 4 * 1024
 	case "3.5-16k":
 		tokenRate = 2
 		msg.Model = "gpt-3.5-turbo-16k"
 		maxTokens = 16 * 1024
 	case "4.0-8k":
-		tokenRate = 20
+		tokenRate = 15
 		msg.Model = "gpt-4"
 		maxTokens = 8 * 1024
-	// case "4.0-32k":
-	// 	tokenRate = 60
-	// 	msg.Model = "gpt-4-32k"
-	//	maxTokens = 32 * 1024
+	case "4.0-128k":
+		tokenRate = 10
+		msg.Model = "gpt-4-1106-preview"
+		maxTokens = 128000
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid model"))
