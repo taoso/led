@@ -150,12 +150,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		h := w.Header()
-		h.Add("Link", "<https://npm.elemecdn.com/water.css@2/out/water.css>; rel=preload; as=style")
-		h.Add("Link", "<https://npm.elemecdn.com/lxgw-wenkai-webfont@1/style.css>; rel=preload; as=style")
-		h.Add("Link", "</style.css>; rel=preload; as=style")
-		w.WriteHeader(http.StatusEarlyHints)
-
 		f.fs.ServeHTTP(w, req)
 		return
 	}
