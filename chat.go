@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -47,23 +48,24 @@ func (p *Proxy) getWallet(wid int, req *http.Request) (w store.TokenWallet, err 
 	return
 }
 
+type chatmsg struct {
+	Messages  []map[string]string `json:"messages"`
+	Model     string              `json:"model"`
+	Stream    bool                `json:"stream"`
+	User      string              `json:"user"`
+	MaxTokens int                 `json:"max_tokens"`
+}
+type _msg struct {
+	chatmsg
+	Sign    string    `json:"_sign,omitempty"`
+	UserID  int       `json:"_user_id,omitempty"`
+	Created time.Time `json:"_created,omitempty"`
+}
+
 func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
 
-	type chatmsg struct {
-		Messages  []map[string]string `json:"messages"`
-		Model     string              `json:"model"`
-		Stream    bool                `json:"stream"`
-		User      string              `json:"user"`
-		MaxTokens int                 `json:"max_tokens"`
-	}
-
-	var msg struct {
-		chatmsg
-		Sign    string    `json:"_sign,omitempty"`
-		UserID  int       `json:"_user_id,omitempty"`
-		Created time.Time `json:"_created,omitempty"`
-	}
+	var msg _msg
 
 	if err := json.NewDecoder(req.Body).Decode(&msg); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -122,6 +124,11 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
+	if strings.HasPrefix(msg.Model, "dall") {
+		p.image(w, req, f, msg, hash)
+		return
+	}
+
 	msg.Stream = true
 	var tokenRate int
 	var maxTokens int
@@ -141,7 +148,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	case "4.0-128k":
 		tokenRate = 10
 		msg.Model = "gpt-4-1106-preview"
-		maxTokens = 128000
+		maxTokens = 4 * 1024
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid model"))
@@ -300,6 +307,149 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	if err := s.Err(); err != nil {
 		log.Println("scan err", err)
 	}
+}
+
+func (p *Proxy) image(w http.ResponseWriter, req *http.Request, f *FileHandler, msg _msg, hash [32]byte) {
+	prompt := msg.Messages[len(msg.Messages)-1]["content"]
+	model := msg.Model
+	quality := "standard"
+	var size string
+	var token int
+	switch model {
+	case "dall-e-3-1024x1024":
+		model = "dall-e-3"
+		size = "1024x1024"
+		token = 10000
+	case "dall-e-3-1024x1792":
+		model = "dall-e-3"
+		size = "1024x1792"
+		token = 20000
+	case "dall-e-3-1792x1024":
+		model = "dall-e-3"
+		size = "1792x1024"
+		token = 20000
+	case "dall-e-3-1024x1024-hd":
+		model = "dall-e-3"
+		size = "1024x1024"
+		quality = "hd"
+		token = 20000
+	case "dall-e-3-1024x1792-hd":
+		model = "dall-e-3"
+		size = "1024x1792"
+		quality = "hd"
+		token = 30000
+	case "dall-e-3-1792x1024-hd":
+		model = "dall-e-3"
+		size = "1792x1024"
+		quality = "hd"
+		token = 30000
+	case "dall-e-2-256x256":
+		model = "dall-e-2"
+		size = "256x256"
+		token = 4000
+	case "dall-e-2-512x512":
+		model = "dall-e-2"
+		size = "512x512"
+		token = 4000
+	case "dall-e-2-1024x1024":
+		model = "dall-e-2"
+		size = "1024x1024"
+		token = 4000
+	}
+
+	b, err := json.Marshal(map[string]any{
+		"model":   model,
+		"prompt":  prompt,
+		"n":       1,
+		"size":    size,
+		"quality": quality,
+		"user":    strconv.Itoa(msg.UserID),
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	url := "https://api.openai.com/v1/images/generations"
+	r, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	r.Header.Set("Authorization", "Bearer "+os.Getenv("CHAT_TOKEN"))
+	r.Header.Set("Content-Type", req.Header.Get("Content-Type"))
+
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+
+	chatID := resp.Header.Get("X-Request-Id")
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("X-Request-Id", chatID)
+	w.WriteHeader(resp.StatusCode)
+
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	var d struct {
+		Data []struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"![%s](%s)\"}}]}\n\n", prompt, d.Data[0].URL)
+
+	var u struct {
+		Usage struct {
+			ReplyTokens  int `json:"completion_tokens"`
+			PromptTokens int `json:"prompt_tokens"`
+			TotalTokens  int `json:"total_tokens"`
+			RemainTokens int `json:"remain_tokens"`
+			TokenRate    int `json:"token_rate"`
+		} `json:"usage"`
+	}
+
+	u.Usage.TokenRate = 1
+	u.Usage.TotalTokens = token
+
+	tl := store.TokenLog{
+		UserID:   msg.UserID,
+		Type:     store.LogTypeCost,
+		TokenNum: u.Usage.TotalTokens,
+		Extra: map[string]string{
+			"chatid":  chatID,
+			"model":   msg.Model,
+			"sha256":  hex.EncodeToString(hash[:]),
+			"size":    size,
+			"quality": quality,
+		},
+		Created: msg.Created,
+		Sign:    msg.Sign,
+	}
+	uw, err := p.TokenRepo.UpdateWallet(&tl)
+	if err != nil {
+		log.Printf("save token log %+v err %v", tl, err)
+	} else {
+		u.Usage.RemainTokens = uw.Tokens
+	}
+	b, _ = json.Marshal(u)
+	b = append([]byte("data: "), b...)
+	b = append(b, []byte("\n\ndata: [DONE]\n\n")...)
+	w.Write(b)
 }
 
 func (p *Proxy) chatCancel(w http.ResponseWriter, req *http.Request, f *FileHandler) {
