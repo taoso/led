@@ -9,25 +9,37 @@ import (
 	"strings"
 
 	"github.com/gorilla/handlers"
+	"golang.org/x/net/webdav"
 )
 
 type FileHandler struct {
 	Root string
 	Name string
 	fs   http.Handler
+	dav  http.Handler
 }
 
 func NewHandler(root string, name string) *FileHandler {
 	path := filepath.Join(root, name)
 
-	h := http.FileServer(leDir{http.Dir(path)})
-	h = handlers.CombinedLoggingHandler(os.Stdout, h)
-	h = handlers.CompressHandler(h)
+	var fs, dav http.Handler
+
+	fs = http.FileServer(leDir{http.Dir(path)})
+	fs = handlers.CombinedLoggingHandler(os.Stdout, fs)
+	fs = handlers.CompressHandler(fs)
+
+	dav = &webdav.Handler{
+		Prefix:     "/.dav",
+		FileSystem: webdav.Dir(path),
+		LockSystem: webdav.NewMemLS(),
+	}
+	dav = handlers.CombinedLoggingHandler(os.Stdout, dav)
 
 	return &FileHandler{
 		Root: path,
 		Name: name,
-		fs:   h,
+		fs:   fs,
+		dav:  dav,
 	}
 }
 

@@ -155,7 +155,7 @@ func main() {
 
 	if lnH3 != nil {
 		h3port := lnH3.LocalAddr().(*net.UDPAddr).Port
-		proxy.AltSvc = fmt.Sprintf(`h3=":%d",h3-29=":%d"`, h3port, h3port)
+		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, h3port)
 	}
 
 	var tlsCfg *tls.Config
@@ -178,7 +178,7 @@ func main() {
 		}
 
 		tlsCfg = acm.TLSConfig()
-		tlsCfg.NextProtos = []string{"acme-tls/1", "http/1.1", "h3", "h3-29"}
+		tlsCfg.NextProtos = append(tlsCfg.NextProtos, http3.NextProtoH3)
 	}
 
 	if lnH3 != nil {

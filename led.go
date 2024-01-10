@@ -146,6 +146,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if strings.HasPrefix(req.URL.Path, "/.dav/") {
+			username, password, ok := req.BasicAuth()
+			if !ok || username != f.Name || !p.auth(username, password) {
+				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			f.dav.ServeHTTP(w, req)
+			return
+		}
+
 		if f.Rewritten(w, req) {
 			return
 		}
