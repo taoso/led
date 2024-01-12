@@ -35,6 +35,8 @@ type Proxy struct {
 	AltSvc string
 
 	chatLinks sync.Map
+
+	DavEvs chan string
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -146,12 +148,70 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(req.URL.Path, "/.dav/") {
+		if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
 			username, password, ok := req.BasicAuth()
 			if !ok || username != f.Name || !p.auth(username, password) {
-				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
+			}
+
+			d, err := time.ParseDuration(req.URL.Query().Get("d"))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			t := time.NewTimer(d)
+			select {
+			case e := <-p.DavEvs:
+				evs := []string{e}
+				// 合并通知短时间产生的文件变更
+				time.Sleep(1 * time.Second)
+			read:
+				for {
+					select {
+					case e := <-p.DavEvs:
+						for _, o := range evs {
+							if o == e {
+								break read
+							}
+						}
+						evs = append(evs, e)
+					default:
+						goto resp
+					}
+				}
+			resp:
+				w.Write([]byte(strings.Join(evs, "\n")))
+			case <-t.C:
+				w.WriteHeader(http.StatusNoContent)
+			}
+			return
+		}
+
+		if strings.HasPrefix(req.URL.Path, "/+/dav/") {
+			username, password, ok := req.BasicAuth()
+			if !ok || username != f.Name || !p.auth(username, password) {
+				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if strings.HasSuffix(req.URL.Path, ".md") {
+				var e string
+				switch req.Method {
+				case "DELETE", "MOVE":
+					e = "-" + f.Name + req.URL.Path[len("/+/dav"):]
+				case "COPY", "PUT", "PROPPATCH":
+					e = "+" + f.Name
+				}
+
+				if e != "" {
+					select {
+					case p.DavEvs <- e:
+					default:
+					}
+				}
 			}
 			f.dav.ServeHTTP(w, req)
 			return

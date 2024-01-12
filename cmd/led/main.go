@@ -116,7 +116,7 @@ const tiktokenURL = "https://openaipublic.blob.core.windows.net/encodings/cl100k
 func main() {
 	flag.Parse()
 
-	proxy := &led.Proxy{}
+	proxy := &led.Proxy{DavEvs: make(chan string, 1024)}
 
 	resp, err := http.Get(tiktokenURL)
 	if err != nil {
