@@ -111,21 +111,22 @@ func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 	return
 }
 
-const tiktokenURL = "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken"
-
 func main() {
 	flag.Parse()
 
 	proxy := &led.Proxy{DavEvs: make(chan string, 1024)}
 
-	resp, err := http.Get(tiktokenURL)
-	if err != nil {
-		panic(err)
-	}
+	if tk := os.Getenv("TIKTOKEN_FILE"); tk != "" {
+		f, err := os.Open(tk)
+		if err != nil {
+			panic(err)
+		}
 
-	proxy.BPE, err = tiktoken.NewCL100K(resp.Body)
-	if err != nil {
-		panic(err)
+		proxy.BPE, err = tiktoken.NewCL100K(f)
+		if err != nil {
+			panic(err)
+		}
+		f.Close()
 	}
 
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
@@ -136,7 +137,9 @@ func main() {
 		)
 	}
 
-	proxy.TokenRepo = store.NewTokenRepo(os.Getenv("TOKEN_REPO_DB"))
+	if db := os.Getenv("TOKEN_REPO_DB"); db != "" {
+		proxy.TokenRepo = store.NewTokenRepo(db)
+	}
 
 	var names atomic.Value
 	go watchload(users, proxy.SetUsers)
