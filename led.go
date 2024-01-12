@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/taoso/led/ecdsa"
@@ -23,8 +22,8 @@ import (
 
 // Proxy http proxy handler
 type Proxy struct {
-	sites atomic.Value
-	users atomic.Value
+	sites map[string]*FileHandler
+	users map[string]string
 
 	BPE *tiktoken.BPE
 
@@ -37,11 +36,11 @@ type Proxy struct {
 	chatLinks sync.Map
 
 	DavEvs chan string
+	Root   string
 }
 
 func (p *Proxy) auth(username, password string) bool {
-	users := p.users.Load().(map[string]string)
-	hash, ok := users[username]
+	hash, ok := p.users[username]
 	if !ok {
 		return false
 	}
@@ -50,16 +49,21 @@ func (p *Proxy) auth(username, password string) bool {
 }
 
 func (p *Proxy) SetUsers(users map[string]string) {
-	p.users.Store(users)
+	p.users = users
 }
 
-func (p *Proxy) SetSites(root string, sites map[string]string) {
+func (p *Proxy) SetSites(sites map[string]string) {
 	hs := make(map[string]*FileHandler, len(sites))
 	for name := range sites {
-		hs[name] = NewHandler(root, name)
+		hs[name] = NewHandler(p.Root, name)
 	}
 
-	p.sites.Store(hs)
+	p.sites = hs
+}
+
+func (p *Proxy) MySite(name string) bool {
+	_, ok := p.sites[name]
+	return ok
 }
 
 func (p *Proxy) host(req *http.Request) string {
@@ -86,8 +90,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
-	fs := p.sites.Load().(map[string]*FileHandler)
-	if f := fs[p.host(req)]; f != nil {
+	if f := p.sites[p.host(req)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
 			return

@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.2.0
-	github.com/fsnotify/fsnotify v1.5.1
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
 	github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400
 	github.com/gorilla/handlers v1.5.1
