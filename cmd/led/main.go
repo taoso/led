@@ -11,12 +11,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"syscall"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
 	"github.com/taoso/led/pay"
@@ -39,37 +39,6 @@ func init() {
 	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
 	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
 	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
-}
-
-func watchload(path string, fn func(map[string]string)) {
-	w, ch := watch(path)
-	defer w.Close()
-	defer close(ch)
-load:
-	f, err := os.Open(path)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	s := bufio.NewScanner(f)
-	kv := map[string]string{}
-	for s.Scan() {
-		l := s.Text()
-		i := strings.Index(l, ":")
-		if i == -1 {
-			i = len(l)
-		}
-
-		host := l[:i]
-		kv[host] = l[i+1:]
-	}
-
-	fn(kv)
-
-	for range ch {
-		goto load
-	}
 }
 
 func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
@@ -114,40 +83,6 @@ func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
 func main() {
 	flag.Parse()
 
-	proxy := &led.Proxy{DavEvs: make(chan string, 1024)}
-
-	if tk := os.Getenv("TIKTOKEN_FILE"); tk != "" {
-		f, err := os.Open(tk)
-		if err != nil {
-			panic(err)
-		}
-
-		proxy.BPE, err = tiktoken.NewCL100K(f)
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
-	}
-
-	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
-		proxy.Alipay = pay.New(
-			id,
-			os.Getenv("ALIPAY_PRIVATE_KEY"),
-			os.Getenv("ALIPAY_PUBLIC_KEY"),
-		)
-	}
-
-	if db := os.Getenv("TOKEN_REPO_DB"); db != "" {
-		proxy.TokenRepo = store.NewTokenRepo(db)
-	}
-
-	var names atomic.Value
-	go watchload(users, proxy.SetUsers)
-	go watchload(sites, func(s map[string]string) {
-		names.Store(s)
-		proxy.SetSites(root, s)
-	})
-
 	lnH1, lnH2, lnH3, err := listen()
 	if err != nil {
 		panic(err)
@@ -156,42 +91,56 @@ func main() {
 		panic("No listen port specified")
 	}
 
-	if lnH3 != nil {
-		h3port := lnH3.LocalAddr().(*net.UDPAddr).Port
-		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, h3port)
+	proxy := &led.Proxy{
+		DavEvs: make(chan string, 1024),
+		Root:   root,
 	}
 
-	var tlsCfg *tls.Config
-	if lnH2 != nil || lnH3 != nil {
-		dir := os.Getenv("HOME") + "/.autocert"
-		acm := autocert.Manager{
-			Cache:  autocert.DirCache(dir),
-			Prompt: autocert.AcceptTOS,
-			HostPolicy: func(ctx context.Context, host string) error {
-				sites := names.Load().(map[string]string)
-				host, err := idna.ToUnicode(host)
-				if err != nil {
-					log.Println("idna.ToUnicode error", err)
-				}
-				if _, ok := sites[host]; !ok {
-					return errors.New(host + " not found")
-				}
-				return nil
-			},
+	if err := load(proxy); err != nil {
+		panic(err)
+	}
+
+	sg := make(chan os.Signal, 3)
+	signal.Notify(sg, syscall.SIGHUP)
+	go func() {
+		for range sg {
+			if err := load(proxy); err != nil {
+				log.Println("load err:", err)
+			}
 		}
+	}()
 
-		tlsCfg = acm.TLSConfig()
-		tlsCfg.NextProtos = append(tlsCfg.NextProtos, http3.NextProtoH3)
-	}
-
-	if lnH3 != nil {
-		h3 := http3.Server{Handler: proxy, TLSConfig: tlsCfg}
-		go h3.Serve(lnH3.(net.PacketConn))
-	}
-
-	if lnH2 == nil {
+	// http only
+	if lnH2 == nil && lnH3 == nil {
 		http.Serve(lnH1, proxy)
 		return
+	}
+
+	// http2 or http3
+	acm := autocert.Manager{
+		Prompt: autocert.AcceptTOS,
+		Cache:  autocert.DirCache(os.Getenv("HOME") + "/.autocert"),
+		HostPolicy: func(ctx context.Context, host string) error {
+			host, err := idna.ToUnicode(host)
+			if err != nil {
+				return err
+			}
+			if !proxy.MySite(host) {
+				return errors.New(host + " not found")
+			}
+			return nil
+		},
+	}
+
+	tlsCfg := acm.TLSConfig()
+	tlsCfg.NextProtos = append(tlsCfg.NextProtos, http3.NextProtoH3)
+
+	if lnH3 != nil {
+		p := lnH3.LocalAddr().(*net.UDPAddr).Port
+		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, p)
+
+		h3 := http3.Server{Handler: proxy, TLSConfig: tlsCfg}
+		go h3.Serve(lnH3)
 	}
 
 	// http -> https
@@ -211,35 +160,66 @@ func main() {
 	s.Serve(lnTLS)
 }
 
-func watch(path string) (watcher *fsnotify.Watcher, ch chan interface{}) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = watcher.Add(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	ch = make(chan interface{}, 1)
-
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if event.Op&fsnotify.Write == fsnotify.Write {
-					ch <- "read"
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				fmt.Println(err)
-			}
+func load(proxy *led.Proxy) error {
+	if tk := os.Getenv("TIKTOKEN_FILE"); tk != "" {
+		f, err := os.Open(tk)
+		if err != nil {
+			return err
 		}
-	}()
-	return
+		defer f.Close()
+
+		bpe, err := tiktoken.NewCL100K(f)
+		if err != nil {
+			return err
+		}
+		proxy.BPE = bpe
+	}
+
+	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
+		proxy.Alipay = pay.New(
+			id,
+			os.Getenv("ALIPAY_PRIVATE_KEY"),
+			os.Getenv("ALIPAY_PUBLIC_KEY"),
+		)
+	}
+
+	if db := os.Getenv("TOKEN_REPO_DB"); db != "" {
+		proxy.TokenRepo = store.NewTokenRepo(db)
+	}
+
+	d, err := loadfile(users)
+	if err != nil {
+		return err
+	}
+	proxy.SetUsers(d)
+
+	d, err = loadfile(sites)
+	if err != nil {
+		return err
+	}
+	proxy.SetSites(d)
+
+	return nil
+}
+
+func loadfile(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	kv := map[string]string{}
+	for s.Scan() {
+		l := s.Text()
+		i := strings.Index(l, ":")
+		if i == -1 {
+			i = len(l)
+		}
+
+		host := l[:i]
+		kv[host] = l[i+1:]
+	}
+	return kv, nil
 }
