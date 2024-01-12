@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CAFxX/httpcompression"
+	"github.com/gorilla/handlers"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
 	"github.com/taoso/led/pay"
@@ -110,9 +112,34 @@ func main() {
 		}
 	}()
 
+	h := handlers.CombinedLoggingHandler(os.Stdout, proxy)
+
+	ch, err := httpcompression.DefaultAdapter(
+		httpcompression.MinSize(1024),
+		httpcompression.ContentTypes([]string{
+			"application/atom+xml",
+			"application/javascript",
+			"application/json",
+			"application/rss+xml",
+			"application/xml",
+			"image/svg+xml",
+			"text/css",
+			"text/html",
+			"text/javascript",
+			"text/mathml",
+			"text/plain",
+			"text/xml",
+		}, false),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	h = ch(h)
+
 	// http only
 	if lnH2 == nil && lnH3 == nil {
-		http.Serve(lnH1, proxy)
+		http.Serve(lnH1, h)
 		return
 	}
 
@@ -139,7 +166,7 @@ func main() {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
 		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, p)
 
-		h3 := http3.Server{Handler: proxy, TLSConfig: tlsCfg}
+		h3 := http3.Server{Handler: h, TLSConfig: tlsCfg}
 		go h3.Serve(lnH3)
 	}
 
@@ -153,7 +180,7 @@ func main() {
 	// https
 	lnTLS := tls.NewListener(lnH2, tlsCfg)
 	s := http.Server{
-		Handler:     proxy,
+		Handler:     h,
 		IdleTimeout: 30 * time.Second,
 	}
 

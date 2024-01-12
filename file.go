@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gorilla/handlers"
 	"golang.org/x/net/webdav"
 )
 
@@ -25,15 +24,12 @@ func NewHandler(root string, name string) *FileHandler {
 	var fs, dav http.Handler
 
 	fs = http.FileServer(leDir{http.Dir(path)})
-	fs = handlers.CombinedLoggingHandler(os.Stdout, fs)
-	fs = handlers.CompressHandler(fs)
 
 	dav = &webdav.Handler{
 		Prefix:     "/+/dav",
 		FileSystem: webdav.Dir(path),
 		LockSystem: webdav.NewMemLS(),
 	}
-	dav = handlers.CombinedLoggingHandler(os.Stdout, dav)
 
 	return &FileHandler{
 		Root: path,
