@@ -29,7 +29,7 @@ func NewHandler(root string, name string) *FileHandler {
 	fs = handlers.CompressHandler(fs)
 
 	dav = &webdav.Handler{
-		Prefix:     "/.dav",
+		Prefix:     "/+/dav",
 		FileSystem: webdav.Dir(path),
 		LockSystem: webdav.NewMemLS(),
 	}
