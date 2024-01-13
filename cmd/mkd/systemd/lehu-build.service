@@ -1,7 +1,7 @@
 [Unit]
 Description=lehu build service
 After=network.target
-Requires=syncthing@st.service
+Requires=lehu.service
 
 [Service]
 Environment=PATH=/home/st/led/mkd:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
