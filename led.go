@@ -175,15 +175,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				evs := []string{e}
 				// 合并通知短时间产生的文件变更
 				time.Sleep(1 * time.Second)
-			read:
 				for {
 					select {
 					case e := <-p.DavEvs:
-						for _, o := range evs {
-							if o == e {
-								break read
-							}
-						}
 						evs = append(evs, e)
 					default:
 						goto resp
