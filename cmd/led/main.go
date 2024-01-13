@@ -112,7 +112,7 @@ func main() {
 		}
 	}()
 
-	h := handlers.CombinedLoggingHandler(os.Stdout, proxy)
+	h := handlers.VhostCombinedLoggingHandler(os.Stdout, proxy)
 
 	ch, err := httpcompression.DefaultAdapter(
 		httpcompression.MinSize(1024),
