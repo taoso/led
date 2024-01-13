@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -153,6 +154,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
 			username, password, ok := req.BasicAuth()
+			if username != "" {
+				req.URL.User = url.User(username)
+			}
 			if !ok || username != f.Name || !p.auth(username, password) {
 				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -195,6 +199,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if strings.HasPrefix(req.URL.Path, "/+/dav/") {
 			username, password, ok := req.BasicAuth()
+			if username != "" {
+				req.URL.User = url.User(username)
+			}
 			if !ok || username != f.Name || !p.auth(username, password) {
 				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -229,9 +236,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
-	username, password, _ := parseBasicAuth(auth)
-	if !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="word wide web"`)
+	username, password, ok := parseBasicAuth(auth)
+	if username != "" {
+		req.URL.User = url.User(username)
+	}
+	if !ok || !p.auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
