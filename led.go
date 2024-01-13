@@ -190,7 +190,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					}
 				}
 			resp:
-				w.Write([]byte(strings.Join(evs, "\n")))
+				for _, e := range evs {
+					w.Write([]byte(e + "\n"))
+				}
 			case <-t.C:
 				w.WriteHeader(http.StatusNoContent)
 			}
