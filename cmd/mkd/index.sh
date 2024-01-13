@@ -28,7 +28,7 @@ find $dir -name '*.yml' \
 	! -name "draft-*.yml" \
 	! -name "index.yml" \
 	! -name "feed.yml" \
-	-exec cat {} + | grep -viE '"title": "(WIP:)?"' |  sort -r >> $tmp
+	-exec cat {} + | grep -viE '"title": "(WIP:.+?)?"' |  sort -r >> $tmp
 
 # 没有 markdown 则不生成 index.htm
 if [[ "$(tail -n 1 $tmp)" == "articles:" ]]; then
