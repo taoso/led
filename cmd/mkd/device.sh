@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
 device_id=$1
-sites=/usr/local/etc/lehu/sites.txt
-syncs=/home/st/sync
 
-grep $device_id $sites | cut -d: -f1 | \
-while read domain; do
+grep $device_id /usr/local/etc/lehu/sites.txt | cut -d: -f1 | while read domain; do
         curl -s -H x-api-key:$api_key $host/rest/config/devices -d '{"deviceID":"'$device_id'"}'
-	folder=/home/st/sync/$domain
+	folder=~/sync/$domain
 	if [[ ! -d $folder ]]; then
-		cp -R /home/st/sync/lehu.in $folder
-		sed -E -i '/IMAP|ga_id|gt_id/d' $folder/env
+		cp -R ~/sync/lehu.in $folder
+		sed -E -i "s/lehu\.in/$domain" $folder/env
 	fi
 
 	fdata=$(curl -s -H x-api-key:$api_key $host/rest/config/folders/$domain)
@@ -33,6 +30,17 @@ while read domain; do
 	}
 EOF
 
-	curl -s -X POST -H x-api-key:$api_key "$host/rest/db/ignores?folder=$domain" \
-		--data-raw '{"ignore":["*.yml","*.htm",".DS_Store","feed.xml","#*#","*.swp","*.tmp","~$*",".#*","*.autosave.*"]}'
+	cat << EOF | curl -s -X POST -H x-api-key:$api_key "$host/rest/db/ignores?folder=$domain" -d @-
+	{"ignore":[
+	     "#*#",
+	     "*.autosave.*"
+	     "*.swp",
+	     "*.tmp",
+	     "*.yml",
+	     ".#*",
+	     ".DS_Store",
+	     "feed.xml",
+	     "~$*",
+	]}
+EOF
 done
