@@ -67,4 +67,4 @@ require (
 	modernc.org/token v1.0.1 // indirect
 )
 
-replace github.com/gorilla/handlers => github.com/taoso/handlers v0.0.0-20240113103927-a1dc979a827e
+replace github.com/gorilla/handlers => github.com/taoso/handlers v0.0.0-20240114034100-5e1a73041a31
