@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -153,6 +154,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
 			username, password, ok := req.BasicAuth()
+			if username != "" {
+				req.URL.User = url.User(username)
+			}
 			if !ok || username != f.Name || !p.auth(username, password) {
 				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -171,22 +175,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				evs := []string{e}
 				// 合并通知短时间产生的文件变更
 				time.Sleep(1 * time.Second)
-			read:
 				for {
 					select {
 					case e := <-p.DavEvs:
-						for _, o := range evs {
-							if o == e {
-								break read
-							}
-						}
 						evs = append(evs, e)
 					default:
 						goto resp
 					}
 				}
 			resp:
-				w.Write([]byte(strings.Join(evs, "\n")))
+				for _, e := range evs {
+					w.Write([]byte(e + "\n"))
+				}
 			case <-t.C:
 				w.WriteHeader(http.StatusNoContent)
 			}
@@ -195,6 +195,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if strings.HasPrefix(req.URL.Path, "/+/dav/") {
 			username, password, ok := req.BasicAuth()
+			if username != "" {
+				req.URL.User = url.User(username)
+			}
 			if !ok || username != f.Name || !p.auth(username, password) {
 				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -229,9 +232,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
-	username, password, _ := parseBasicAuth(auth)
-	if !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="word wide web"`)
+	username, password, ok := parseBasicAuth(auth)
+	if username != "" {
+		req.URL.User = url.User(username)
+	}
+	if !ok || !p.auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}

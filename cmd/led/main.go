@@ -41,6 +41,8 @@ func init() {
 	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
 	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
 	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
+
+	log.SetOutput(os.Stderr)
 }
 
 func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
@@ -112,7 +114,7 @@ func main() {
 		}
 	}()
 
-	h := handlers.CombinedLoggingHandler(os.Stdout, proxy)
+	h := handlers.VhostCombinedLoggingHandler(os.Stdout, proxy)
 
 	ch, err := httpcompression.DefaultAdapter(
 		httpcompression.MinSize(1024),
@@ -160,7 +162,7 @@ func main() {
 	}
 
 	tlsCfg := acm.TLSConfig()
-	tlsCfg.NextProtos = append(tlsCfg.NextProtos, http3.NextProtoH3)
+	tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
 
 	if lnH3 != nil {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
