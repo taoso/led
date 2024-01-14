@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
@@ -146,6 +148,11 @@ func main() {
 	}
 
 	// http2 or http3
+	bindingKey, err := base64.RawURLEncoding.DecodeString(os.Getenv("ACME_EAB_KEY"))
+	if err != nil {
+		log.Fatalf("Failed to create account key: %v", err)
+	}
+
 	acm := autocert.Manager{
 		Prompt: autocert.AcceptTOS,
 		Cache:  autocert.DirCache(os.Getenv("HOME") + "/.autocert"),
@@ -158,6 +165,13 @@ func main() {
 				return errors.New(host + " not found")
 			}
 			return nil
+		},
+		Client: &acme.Client{
+			DirectoryURL: "https://acme.zerossl.com/v2/DV90",
+		},
+		ExternalAccountBinding: &acme.ExternalAccountBinding{
+			KID: os.Getenv("ACME_EAB_KID"),
+			Key: bindingKey,
 		},
 	}
 
@@ -177,7 +191,7 @@ func main() {
 		url := "https://" + r.Host + r.RequestURI
 		http.Redirect(w, r, url, http.StatusMovedPermanently)
 	})
-	go http.Serve(lnH1, h301)
+	go http.Serve(lnH1, acm.HTTPHandler(h301))
 
 	// https
 	lnTLS := tls.NewListener(lnH2, tlsCfg)
