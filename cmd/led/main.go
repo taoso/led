@@ -41,6 +41,8 @@ func init() {
 	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
 	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
 	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
+
+	log.SetOutput(os.Stderr)
 }
 
 func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
