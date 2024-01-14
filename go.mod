@@ -66,3 +66,5 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.0.1 // indirect
 )
+
+replace github.com/gorilla/handlers => github.com/taoso/handlers v0.0.0-20240114034100-5e1a73041a31
