@@ -163,6 +163,7 @@ func main() {
 
 	tlsCfg := acm.TLSConfig()
 	tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
+	tlsCfg.MinVersion = tls.VersionTLS12
 
 	if lnH3 != nil {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
@@ -174,6 +175,10 @@ func main() {
 
 	// http -> https
 	h301 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/") {
+			h.ServeHTTP(w, r)
+			return
+		}
 		url := "https://" + r.Host + r.RequestURI
 		http.Redirect(w, r, url, http.StatusMovedPermanently)
 	})
