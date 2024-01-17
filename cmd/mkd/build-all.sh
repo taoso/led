@@ -6,14 +6,14 @@ since=0
 events=RemoteChangeDetected,PendingDevicesChanged
 
 # 首次启动跳过已经发生的事件
-curl -s -H x-api-key:$api_key "$host/rest/events?timeout=0&events=$events" > /tmp/events.txt
+curl -s -K ~/.curl-st-key "$host/rest/events?timeout=0&events=$events" > /tmp/events.txt
 last=$(jq -r '.[]|.id' /tmp/events.txt | tail -n 1)
 if [[ ! -z "$last" ]]; then
 	since=$last
 fi
 
 while true; do
-        curl -s -H x-api-key:$api_key "$host/rest/events?since=$since&events=$events" > /tmp/events.txt
+        curl -s -K ~/.curl-st-key "$host/rest/events?since=$since&events=$events" > /tmp/events.txt
 
 	jq -r '.[]|select(.type == "PendingDevicesChanged")|.data.added[0].deviceID|select(.!=null)' \
 		/tmp/events.txt | sort | uniq | \
