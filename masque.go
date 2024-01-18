@@ -68,3 +68,18 @@ func parseMasqueTarget(target *url.URL) (addr string, err error) {
 
 	return
 }
+
+func parseContextID(d []byte) (int, int) {
+	if len(d) == 0 {
+		return 0, 0
+	}
+	id := int(d[0])
+	p := id >> 6
+	l := 1 << p
+
+	id = id & 0x3f
+	for i := 1; i < l; i++ {
+		id = id<<8 + int(d[i])
+	}
+	return id, l
+}

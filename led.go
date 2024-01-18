@@ -405,16 +405,14 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	go func() {
 		b := make([]byte, 1500)
 		for {
-			// skip the leading context id of (0)
 			n, err := up.Read(b[1:])
 			if err != nil {
 				return
 			}
-			err = qc.SendDatagram(b[n:])
+			err = qc.SendDatagram(b[:n])
 			if err != nil {
 				return
 			}
-
 		}
 	}()
 
@@ -425,8 +423,11 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			return
 		}
-		// skip the leading context id of (0)
-		_, err = up.Write(b[1:])
+		id, n := parseContextID(b)
+		if id != 0 || n == 0 || len(b)-n == 0 {
+			continue
+		}
+		_, err = up.Write(b[n:])
 		if err != nil {
 			return
 		}
