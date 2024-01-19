@@ -388,7 +388,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("target", addr, req.URL.RawPath, req.URL.RawQuery)
+	log.Println("target", addr, req.URL.RawPath, req.URL.RawQuery, req.URL.Path)
 
 	up, err := net.Dial("udp", addr)
 	if err != nil {
@@ -397,7 +397,6 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		log.Println("dial udp err", err)
 		return
 	}
-	defer up.Close()
 
 	w.Header().Add("capsule-protocol", "?1")
 	w.WriteHeader(http.StatusOK)
@@ -413,9 +412,10 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	qc := hj.StreamCreator().(quic.Connection)
-	defer qc.CloseWithError(0, "")
 
 	go func() {
+		defer up.Close()
+		defer qc.CloseWithError(0, "")
 		b := make([]byte, 1500)
 		for {
 			n, err := up.Read(b[1:])
@@ -430,23 +430,27 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	ctx := context.Background()
+	go func() {
+		defer up.Close()
+		defer qc.CloseWithError(0, "")
+		ctx := context.Background()
 
-	for {
-		b, err := qc.ReceiveDatagram(ctx)
-		if err != nil {
-			log.Println("ReceiveDatagram err:", err)
-			return
+		for {
+			b, err := qc.ReceiveDatagram(ctx)
+			if err != nil {
+				log.Println("ReceiveDatagram err:", err)
+				return
+			}
+			id, n := parseContextID(b)
+			if id != 0 || n == 0 || len(b)-n == 0 {
+				continue
+			}
+			_, err = up.Write(b[n:])
+			if err != nil {
+				return
+			}
 		}
-		id, n := parseContextID(b)
-		if id != 0 || n == 0 || len(b)-n == 0 {
-			continue
-		}
-		_, err = up.Write(b[n:])
-		if err != nil {
-			return
-		}
-	}
+	}()
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
