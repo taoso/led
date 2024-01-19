@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led/ecdsa"
@@ -379,6 +380,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	w = w.(httpsnoop.Unwrapper).Unwrap()
 	hj, ok := w.(http3.Hijacker)
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
