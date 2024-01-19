@@ -96,6 +96,35 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
+	auth := req.Header.Get("Proxy-Authorization")
+
+	if auth == "" {
+		p.serveLocal(w, req)
+		return
+	}
+
+	username, password, ok := parseBasicAuth(auth)
+	if username != "" {
+		req.URL.User = url.User(username)
+	}
+	if !ok || !p.auth(username, password) {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
+		w.WriteHeader(http.StatusProxyAuthRequired)
+		return
+	}
+
+	if req.Method == http.MethodConnect {
+		if req.Proto == "connect-udp" {
+			proxyUDP(w, req)
+		} else {
+			proxyHTTPS(w, req)
+		}
+	} else {
+		proxyHTTP(w, req)
+	}
+}
+
+func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	if f := p.sites[p.host(req)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -234,36 +263,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		f.fs.ServeHTTP(w, req)
 		return
-	}
-
-	auth := req.Header.Get("Proxy-Authorization")
-
-	if auth == "" {
+	} else {
 		if p.defaultSite == nil {
 			p.defaultSite = http.FileServer(http.Dir(p.Root + "/default"))
 		}
 		p.defaultSite.ServeHTTP(w, req)
 		return
-	}
-
-	username, password, ok := parseBasicAuth(auth)
-	if username != "" {
-		req.URL.User = url.User(username)
-	}
-	if !ok || !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
-		w.WriteHeader(http.StatusProxyAuthRequired)
-		return
-	}
-
-	if req.Method == http.MethodConnect {
-		if req.Proto == "connect-udp" {
-			proxyUDP(w, req)
-		} else {
-			proxyHTTPS(w, req)
-		}
-	} else {
-		proxyHTTP(w, req)
 	}
 }
 
