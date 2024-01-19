@@ -168,7 +168,11 @@ func main() {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
 		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, p)
 
-		h3 := http3.Server{Handler: h, TLSConfig: tlsCfg}
+		h3 := http3.Server{
+			Handler:         h,
+			TLSConfig:       tlsCfg,
+			EnableDatagrams: true,
+		}
 		go h3.Serve(lnH3)
 	}
 
