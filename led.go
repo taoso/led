@@ -380,15 +380,6 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	w = w.(httpsnoop.Unwrapper).Unwrap()
-	hj, ok := w.(http3.Hijacker)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("cannot hijack http3"))
-		log.Println("cannot hijack http3")
-		return
-	}
-
 	addr, err := parseMasqueTarget(req.URL)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -410,6 +401,16 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Add("capsule-protocol", "?1")
 	w.WriteHeader(http.StatusOK)
+	w.(http.Flusher).Flush()
+
+	w = w.(httpsnoop.Unwrapper).Unwrap()
+	hj, ok := w.(http3.Hijacker)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("cannot hijack http3"))
+		log.Println("cannot hijack http3")
+		return
+	}
 
 	qc := hj.StreamCreator().(quic.Connection)
 	defer qc.CloseWithError(0, "")
