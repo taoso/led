@@ -420,6 +420,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		for {
 			n, err := up.Read(b[1:])
 			if err != nil {
+				log.Println("up.Read err:", err)
 				return
 			}
 			err = qc.SendDatagram(b[:n])
@@ -442,11 +443,13 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 			id, n := parseContextID(b)
+			log.Println("ReceiveDatagram", id, n, b)
 			if id != 0 || n == 0 || len(b)-n == 0 {
 				continue
 			}
 			_, err = up.Write(b[n:])
 			if err != nil {
+				log.Println("up.Write err:", err)
 				return
 			}
 		}

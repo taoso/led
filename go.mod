@@ -15,7 +15,7 @@ require (
 	github.com/quic-go/quic-go v0.41.0
 	github.com/smartwalle/alipay/v3 v3.2.1
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.7.0
+	golang.org/x/crypto v0.18.0
 	golang.org/x/net v0.10.0
 	modernc.org/sqlite v1.21.1
 )
@@ -51,8 +51,8 @@ require (
 	golang.org/x/arch v0.0.0-20210901143047-ebb09ed340f1 // indirect
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
@@ -67,3 +67,7 @@ require (
 )
 
 replace github.com/gorilla/handlers => github.com/taoso/handlers v0.0.0-20240119013147-1cf398501f02
+
+replace golang.org/x/net v0.10.0 => github.com/taoso/golang-net v0.0.0-20240119045234-d2c740856afc
+
+replace golang.org/x/net v0.0.0-20220722155237-a158d28d115b => github.com/taoso/golang-net v0.0.0-20240119045234-d2c740856afc
