@@ -388,7 +388,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("target", addr, req.URL.RawPath, req.URL.RawQuery, req.URL.Path)
+	log.Println("target", addr, req.URL.Path, req.ProtoMajor, req.URL)
 
 	up, err := net.Dial("udp", addr)
 	if err != nil {
