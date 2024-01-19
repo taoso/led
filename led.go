@@ -397,6 +397,8 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	log.Println("target", addr, req.URL.RawPath, req.URL.RawQuery)
+
 	up, err := net.Dial("udp", addr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -421,6 +423,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 			}
 			err = qc.SendDatagram(b[:n])
 			if err != nil {
+				log.Println("SendDatagram err:", err)
 				return
 			}
 		}
@@ -431,6 +434,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	for {
 		b, err := qc.ReceiveDatagram(ctx)
 		if err != nil {
+			log.Println("ReceiveDatagram err:", err)
 			return
 		}
 		id, n := parseContextID(b)
