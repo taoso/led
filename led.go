@@ -383,6 +383,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("cannot hijack http3"))
+		log.Println("cannot hijack http3")
 		return
 	}
 
@@ -390,6 +391,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid target"))
+		log.Println("invalid target", req.URL)
 		return
 	}
 
@@ -397,6 +399,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("dial udp err: " + err.Error()))
+		log.Println("dial udp err", err)
 		return
 	}
 	defer up.Close()
