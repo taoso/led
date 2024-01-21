@@ -163,6 +163,16 @@ func main() {
 
 	tlsCfg := acm.TLSConfig()
 
+	certs, err := tls.LoadX509KeyPair(
+		"/Users/lvht/Documents/mkcert/localhost.pem",
+		"/Users/lvht/Documents/mkcert/localhost-key.pem",
+	)
+	if err != nil {
+		panic(err)
+	}
+	tlsCfg.GetCertificate = nil
+	tlsCfg.Certificates = []tls.Certificate{certs}
+
 	if lnH3 != nil {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
 		proxy.AltSvc = fmt.Sprintf(`h3=":%d"`, p)

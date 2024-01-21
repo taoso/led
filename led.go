@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/felixge/httpsnoop"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
@@ -118,6 +120,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if req.Proto == "connect-udp" {
 			proxyUDP(w, req)
 		} else {
+			if req.ProtoMajor == 3 {
+				http.Error(w, "only support connect-udp", http.StatusNotImplemented)
+				return
+			}
 			proxyHTTPS(w, req)
 		}
 	} else {
@@ -376,7 +382,8 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if req.ProtoMajor < 3 {
-		http.Error(w, "Only support HTTP/3", http.StatusHTTPVersionNotSupported)
+		w.WriteHeader(http.StatusNotImplemented)
+		w.Write([]byte("does not support connect-udp over http/1.1 and h2"))
 		return
 	}
 
@@ -388,7 +395,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("target", addr, req.URL.Path, req.ProtoMajor, req.URL)
+	log.Println("target:", addr, req.ProtoMajor, req.Proto, req.URL)
 
 	up, err := net.Dial("udp", addr)
 	if err != nil {
@@ -407,23 +414,31 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("cannot hijack http3"))
-		log.Println("cannot hijack http3")
+		fmt.Println("cannot hijack http3")
 		return
 	}
 
 	qc := hj.StreamCreator().(quic.Connection)
 
+	defer up.Close()
+	defer qc.CloseWithError(0, "")
+
+	id := req.Context().Value(http3.StreamIDContextKey).(quic.StreamID)
+
 	go func() {
-		defer up.Close()
-		defer qc.CloseWithError(0, "")
-		b := make([]byte, 1500)
+		var s []byte
+		s = quicvarint.Append(s, uint64(id)/4)
+
+		b := make([]byte, 65535)
+		copy(b, s)
 		for {
-			n, err := up.Read(b[1:])
+			n, err := up.Read(b[len(s)+1:])
 			if err != nil {
 				log.Println("up.Read err:", err)
 				return
 			}
-			err = qc.SendDatagram(b[:n])
+			fmt.Println("d <- u", n+len(s)+1)
+			err = qc.SendDatagram(b[:n+len(s)+1])
 			if err != nil {
 				log.Println("SendDatagram err:", err)
 				return
@@ -431,29 +446,32 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	go func() {
-		defer up.Close()
-		defer qc.CloseWithError(0, "")
-		ctx := context.Background()
+	ctx := context.Background()
 
-		for {
-			b, err := qc.ReceiveDatagram(ctx)
-			if err != nil {
-				log.Println("ReceiveDatagram err:", err)
-				return
-			}
-			id, n := parseContextID(b)
-			log.Println("ReceiveDatagram", id, n, b)
-			if id != 0 || n == 0 || len(b)-n == 0 {
-				continue
-			}
-			_, err = up.Write(b[n:])
-			if err != nil {
-				log.Println("up.Write err:", err)
-				return
-			}
+	for {
+		b, err := qc.ReceiveDatagram(ctx)
+		if err != nil {
+			log.Println("ReceiveDatagram err:", err)
+			return
 		}
-	}()
+		r := bytes.NewBuffer(b)
+		qid, err := quicvarint.Read(r)
+		fmt.Println("+++", qid)
+		if err != nil {
+			continue
+		}
+		cid, err := quicvarint.Read(r)
+		fmt.Println("+++", cid)
+		if err != nil {
+			continue
+		}
+		_, err = up.Write(r.Bytes())
+		if err != nil {
+			log.Println("up.Write err:", err)
+			return
+		}
+		fmt.Println("d -> u", len(b)-2)
+	}
 }
 
 func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
@@ -466,7 +484,7 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	defer upConn.Close()
 
 	var downConn io.ReadWriteCloser
-	if req.ProtoMajor == 2 {
+	if req.ProtoMajor >= 2 {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
 		downConn = flushWriter{w: w, r: req.Body}
@@ -532,12 +550,14 @@ type flushWriter struct {
 }
 
 func (fw flushWriter) Write(p []byte) (n int, err error) {
+	fmt.Println("tcp", "u -> d", len(p))
 	n, err = fw.w.Write(p)
 	fw.w.(http.Flusher).Flush()
 	return
 }
 
 func (fw flushWriter) Read(p []byte) (n int, err error) {
+	defer fmt.Println("tcp", "d -> u", n)
 	return fw.r.Read(p)
 }
 

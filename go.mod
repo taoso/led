@@ -68,6 +68,4 @@ require (
 
 replace github.com/gorilla/handlers => github.com/taoso/handlers v0.0.0-20240119013147-1cf398501f02
 
-replace golang.org/x/net v0.10.0 => github.com/taoso/golang-net v0.0.0-20240119045234-d2c740856afc
-
-replace golang.org/x/net v0.0.0-20220722155237-a158d28d115b => github.com/taoso/golang-net v0.0.0-20240119045234-d2c740856afc
+replace github.com/quic-go/quic-go => ../quic-go/
