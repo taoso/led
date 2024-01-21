@@ -235,7 +235,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	auth := req.Header.Get("Proxy-Authorization")
 
-	if auth == "" {
+	if req.Method != http.MethodConnect && auth == "" {
 		if p.defaultSite == nil {
 			p.defaultSite = http.FileServer(http.Dir(p.Root + "/default"))
 		}
