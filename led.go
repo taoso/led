@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/taoso/led/ecdsa"
@@ -410,7 +409,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	w.(http.Flusher).Flush()
 
 	w = w.(httpsnoop.Unwrapper).Unwrap()
-	hj, ok := w.(http3.Hijacker)
+	hj, ok := w.(http3.Datagrammer)
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("cannot hijack http3"))
@@ -418,27 +417,18 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	qc := hj.StreamCreator().(quic.Connection)
-
 	defer up.Close()
-	defer qc.CloseWithError(0, "")
-
-	id := req.Context().Value(http3.StreamIDContextKey).(quic.StreamID)
 
 	go func() {
-		var s []byte
-		s = quicvarint.Append(s, uint64(id)/4)
-
-		b := make([]byte, 65535)
-		copy(b, s)
+		b := make([]byte, 1500)
 		for {
-			n, err := up.Read(b[len(s)+1:])
+			n, err := up.Read(b[1:])
 			if err != nil {
 				log.Println("up.Read err:", err)
 				return
 			}
-			fmt.Println("d <- u", n+len(s)+1)
-			err = qc.SendDatagram(b[:n+len(s)+1])
+			fmt.Println("d <- u", n+1)
+			err = hj.SendMessage(b[:n+1])
 			if err != nil {
 				log.Println("SendDatagram err:", err)
 				return
@@ -449,17 +439,12 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	ctx := context.Background()
 
 	for {
-		b, err := qc.ReceiveDatagram(ctx)
+		b, err := hj.ReceiveMessage(ctx)
 		if err != nil {
 			log.Println("ReceiveDatagram err:", err)
 			return
 		}
 		r := bytes.NewBuffer(b)
-		qid, err := quicvarint.Read(r)
-		fmt.Println("+++", qid)
-		if err != nil {
-			continue
-		}
 		cid, err := quicvarint.Read(r)
 		fmt.Println("+++", cid)
 		if err != nil {
@@ -470,7 +455,7 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 			log.Println("up.Write err:", err)
 			return
 		}
-		fmt.Println("d -> u", len(b)-2)
+		fmt.Println("d -> u", len(b)-1)
 	}
 }
 
