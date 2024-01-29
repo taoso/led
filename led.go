@@ -93,6 +93,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
+	if ip := req.Header.Get("CF-Connecting-IP"); ip != "" {
+		_, port, _ := net.SplitHostPort(req.RemoteAddr)
+		req.RemoteAddr = ip + ":" + port
+	}
+
 	if f := p.sites[p.host(req)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
