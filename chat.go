@@ -133,7 +133,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	var tokenRate int
 	var maxTokens int
 	switch msg.Model {
-	case "3.5-8k", "", "gpt-3.5-turbo", "3.5-4k", "3.5-16k":
+	case "3.5-8k", "", "gpt-3.5-turbo", "3.5-4k", "3.5-16k", "3.5-turbo":
 		tokenRate = 2
 		msg.Model = "gpt-3.5-turbo"
 		maxTokens = 4 * 1024
