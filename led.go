@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
@@ -89,7 +90,20 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 	w.WriteHeader(http.StatusMovedPermanently)
 }
 
+var upgrader = websocket.Upgrader{}
+
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.URL.Path == "/ws" {
+		c, err := upgrader.Upgrade(w, req, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer c.Close()
+		p.ProxyWS(c)
+		return
+	}
+
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
