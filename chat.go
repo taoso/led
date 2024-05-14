@@ -141,6 +141,10 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		tokenRate = 6
 		msg.Model = "gpt-4-turbo"
 		maxTokens = 4 * 1024
+	case "gpt-4o":
+		tokenRate = 6
+		msg.Model = "gpt-4o"
+		maxTokens = 4 * 1024
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid model"))
