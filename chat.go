@@ -142,7 +142,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		msg.Model = "gpt-4-turbo"
 		maxTokens = 4 * 1024
 	case "gpt-4o":
-		tokenRate = 6
+		tokenRate = 4
 		msg.Model = "gpt-4o"
 		maxTokens = 4 * 1024
 	default:
