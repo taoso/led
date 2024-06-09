@@ -220,6 +220,10 @@ func load(proxy *led.Proxy) error {
 		proxy.TokenRepo = store.NewTokenRepo(db)
 	}
 
+	if db := os.Getenv("TICKET_REPO_DB"); db != "" {
+		proxy.TicketRepo = store.NewTicketRepo(db)
+	}
+
 	d, err := loadfile(users)
 	if err != nil {
 		return err

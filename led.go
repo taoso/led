@@ -30,7 +30,8 @@ type Proxy struct {
 
 	Alipay *pay.Alipay
 
-	TokenRepo *store.TokenRepo
+	TokenRepo  *store.TokenRepo
+	TicketRepo store.TicketRepo
 
 	AltSvc string
 
@@ -45,7 +46,15 @@ type Proxy struct {
 func (p *Proxy) auth(username, password string) bool {
 	hash, ok := p.users[username]
 	if !ok {
-		return false
+		ts, err := p.TicketRepo.List(username, 1)
+		if err != nil {
+			log.Println("ticket list error: ", username, err)
+			return false
+		}
+		if len(ts) == 0 || ts[0].Bytes <= 0 {
+			return false
+		}
+		return true
 	}
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
@@ -106,6 +115,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		if strings.HasPrefix(req.RequestURI, "/+/v2/") {
 			p.api2(w, req, f)
+			return
+		}
+
+		if req.URL.Path == "/+/ticket" && req.Method == http.MethodPost {
+			p.ServeTicket(w, req)
 			return
 		}
 
@@ -259,7 +273,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodConnect {
-		proxyHTTPS(w, req)
+		p.proxyHTTPS(w, req)
 	} else {
 		proxyHTTP(w, req)
 	}
@@ -366,7 +380,7 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
-func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	address := req.RequestURI
 	upConn, err := net.DialTimeout("tcp", address, 5*time.Second)
 	if err != nil {
@@ -385,8 +399,43 @@ func proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 		downConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 	}
 
-	go io.Copy(upConn, downConn)
-	io.Copy(downConn, upConn)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	user := req.URL.User.Username()
+
+	cost := func(n int) {}
+
+	if _, ok := p.users[user]; !ok {
+		cost = func(n int) {
+			err := p.TicketRepo.Cost(user, n)
+			if err != nil {
+				log.Println("ticket cost error: ", user, n, err)
+				downConn.Close()
+				upConn.Close()
+			}
+		}
+	}
+
+	u := &bytesCounter{w: upConn, d: 1 * time.Second, f: cost}
+	d := &bytesCounter{w: downConn, d: 1 * time.Second, f: cost}
+
+	go u.Start()
+	go d.Start()
+
+	go func() {
+		defer wg.Done()
+		io.Copy(u, downConn)
+	}()
+	go func() {
+		defer wg.Done()
+		io.Copy(d, upConn)
+	}()
+
+	wg.Wait()
+
+	u.Done()
+	d.Done()
 }
 
 func proxyHTTP(w http.ResponseWriter, req *http.Request) {
