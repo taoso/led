@@ -51,13 +51,13 @@ func (h *Proxy) ServeTicket(w http.ResponseWriter, r *http.Request) {
 		const GB = 1024 * 1024 * 1024
 		switch req.Cents {
 		case 200:
-			bytes = 1 * GB
+			bytes = 2 * GB
 			months = 1
 		case 400:
-			bytes = 4 * GB
+			bytes = 8 * GB
 			months = 2
 		case 800:
-			bytes = 16 * GB
+			bytes = 32 * GB
 			months = 3
 		default:
 			http.Error(w, "cents must in [200,400,800]", http.StatusBadRequest)
