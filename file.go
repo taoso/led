@@ -21,6 +21,10 @@ type FileHandler struct {
 func NewHandler(root string, name string) *FileHandler {
 	path := filepath.Join(root, name)
 
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		path = filepath.Join(root, "default")
+	}
+
 	var fs, dav http.Handler
 
 	fs = http.FileServer(leDir{http.Dir(path)})

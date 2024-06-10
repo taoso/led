@@ -39,8 +39,6 @@ type Proxy struct {
 
 	DavEvs chan string
 	Root   string
-
-	defaultSite http.Handler
 }
 
 func (p *Proxy) auth(username, password string) bool {
@@ -253,14 +251,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	auth := req.Header.Get("Proxy-Authorization")
-
-	if req.Method != http.MethodConnect && auth == "" {
-		if p.defaultSite == nil {
-			p.defaultSite = http.FileServer(http.Dir(p.Root + "/default"))
-		}
-		p.defaultSite.ServeHTTP(w, req)
-		return
-	}
 
 	username, password, ok := parseBasicAuth(auth)
 	if username != "" {
