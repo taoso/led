@@ -76,8 +76,7 @@ func (p *Proxy) MySite(name string) bool {
 	return ok
 }
 
-func (p *Proxy) host(req *http.Request) string {
-	host := req.Host
+func (p *Proxy) host(host string) string {
 	if i := strings.Index(host, ":"); i > 0 {
 		host = host[:i]
 	}
@@ -100,12 +99,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
+	origin := req.Header.Get("Origin")
+	if u, err := url.Parse(origin); err == nil {
+		if _, ok := p.sites[p.host(u.Host)]; ok {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+	}
+
 	if ip := req.Header.Get("CF-Connecting-IP"); ip != "" {
 		_, port, _ := net.SplitHostPort(req.RemoteAddr)
 		req.RemoteAddr = ip + ":" + port
 	}
 
-	if f := p.sites[p.host(req)]; f != nil {
+	if f := p.sites[p.host(req.Host)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
 			return
