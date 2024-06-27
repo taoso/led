@@ -73,55 +73,74 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		return
 	}
 
-	if msg.Created.Sub(time.Now()).Abs() > 30*time.Second {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("invalid created"))
-		return
-	}
+	var err error
+	var hash [32]byte
+	var wallet store.TokenWallet
 
-	wallet, err := p.getWallet(msg.UserID, req)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	} else if wallet.ID == 0 {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	if auth := req.Header.Get("Authorization"); auth != "" {
+		key := auth[len("Bearer "):]
+		wallet, err = p.TokenRepo.FindWallet(key)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		} else if wallet.ID == 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+	} else {
+		if msg.Created.Sub(time.Now()).Abs() > 30*time.Second {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("invalid created"))
+			return
+		}
 
-	// 会话过期
-	if wallet.Pubkey == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+		wallet, err = p.getWallet(msg.UserID, req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		} else if wallet.ID == 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-	pk, err := wallet.GetPubkey()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
+		// 会话过期
+		if wallet.Pubkey == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-	var buf bytes.Buffer
-	for _, m := range msg.Messages {
-		buf.WriteString(m["role"])
-		buf.WriteString(m["content"])
-	}
-	buf.WriteString(strconv.Itoa(msg.UserID))
-	buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
-	if msg.Model != "gpt-3.5-turbo" {
-		buf.WriteString(msg.Model)
-	}
+		pk, err := wallet.GetPubkey()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
 
-	ok, hash, err := ecdsa.VerifyES256(buf.String(), msg.Sign, pk)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	}
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("invalid signature"))
-		return
+		var buf bytes.Buffer
+		for _, m := range msg.Messages {
+			buf.WriteString(m["role"])
+			buf.WriteString(m["content"])
+		}
+		buf.WriteString(strconv.Itoa(msg.UserID))
+		buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
+		if msg.Model != "gpt-3.5-turbo" {
+			buf.WriteString(msg.Model)
+		}
+
+		var ok bool
+		ok, hash, err = ecdsa.VerifyES256(buf.String(), msg.Sign, pk)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("invalid signature"))
+			return
+		}
 	}
 
 	if strings.HasPrefix(msg.Model, "dall") {
