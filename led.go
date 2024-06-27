@@ -26,7 +26,7 @@ type Proxy struct {
 	sites map[string]*FileHandler
 	users map[string]string
 
-	BPE *tiktoken.BPE
+	BPEs map[string]*tiktoken.BPE
 
 	Alipay *pay.Alipay
 
@@ -39,6 +39,19 @@ type Proxy struct {
 
 	DavEvs chan string
 	Root   string
+}
+
+func (p *Proxy) bpe(model string) *tiktoken.BPE {
+	var name string
+
+	switch model {
+	case "gpt-4o":
+		name = "o200k_base"
+	default:
+		name = "cl100k_base"
+	}
+
+	return p.BPEs[name]
 }
 
 func (p *Proxy) auth(username, password string) bool {

@@ -199,7 +199,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		}
 	}()
 
-	u.Usage.PromptTokens = p.BPE.CountMessage(msg.Messages)
+	u.Usage.PromptTokens = p.bpe(msg.Model).CountMessage(msg.Messages)
 
 	if maxTokens <= u.Usage.PromptTokens {
 		w.WriteHeader(http.StatusPaymentRequired)
@@ -279,7 +279,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		}
 
 		for _, c := range data.Choices {
-			u.Usage.ReplyTokens += p.BPE.Count(c.Delta.Content)
+			u.Usage.ReplyTokens += p.bpe(msg.Model).Count(c.Delta.Content)
 		}
 
 		b, err := json.Marshal(data)
