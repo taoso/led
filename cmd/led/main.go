@@ -195,17 +195,27 @@ func main() {
 
 func load(proxy *led.Proxy) error {
 	if tk := os.Getenv("TIKTOKEN_FILE"); tk != "" {
-		f, err := os.Open(tk)
-		if err != nil {
-			return err
+		bpes := map[string]*tiktoken.BPE{}
+		for _, kv := range strings.Split(tk, ",") {
+			name := "cl100k_base"
+			path := kv
+			if ps := strings.Split(kv, "="); len(ps) == 2 {
+				name = ps[0]
+				path = ps[1]
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			bpe, err := tiktoken.NewCL100K(f)
+			if err != nil {
+				return err
+			}
+			bpes[name] = bpe
 		}
-		defer f.Close()
 
-		bpe, err := tiktoken.NewCL100K(f)
-		if err != nil {
-			return err
-		}
-		proxy.BPE = bpe
+		proxy.BPEs = bpes
 	}
 
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
