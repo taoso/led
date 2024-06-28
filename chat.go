@@ -3,9 +3,12 @@ package led
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"image"
 	"io"
 	"log"
 	"math"
@@ -18,9 +21,15 @@ import (
 	"time"
 	"unsafe"
 
+	_ "image/jpeg"
+	_ "image/png"
+
+	_ "golang.org/x/image/webp"
+
 	"github.com/taoso/led/ecdsa"
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
+	"github.com/taoso/led/tiktoken"
 )
 
 const utcTime = "2006-01-02T15:04:05.000Z"
@@ -48,13 +57,172 @@ func (p *Proxy) getWallet(wid int, req *http.Request) (w store.TokenWallet, err 
 	return
 }
 
-type chatmsg struct {
-	Messages  []map[string]string `json:"messages"`
-	Model     string              `json:"model"`
-	Stream    bool                `json:"stream"`
-	User      string              `json:"user"`
-	MaxTokens int                 `json:"max_tokens"`
+type Message struct {
+	Role    string `json:"role"`
+	Content any    `json:"content"`
 }
+
+func (m *Message) UnmarshalJSON(data []byte) error {
+	var n struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+
+	if err := json.Unmarshal(data, &n); err != nil {
+		return err
+	}
+
+	switch n.Content[0] {
+	case '"':
+		var c string
+		if err := json.Unmarshal(n.Content, &c); err != nil {
+			return err
+		}
+		m.Content = c
+	case '[':
+		var c []TypedMessage
+		if err := json.Unmarshal(n.Content, &c); err != nil {
+			return err
+		}
+		m.Content = c
+	default:
+		return fmt.Errorf("unexpected content type")
+	}
+
+	m.Role = n.Role
+	return nil
+}
+
+type TypedMessage struct {
+	Type  string `json:"type"`
+	Text  string `json:"text,omitempty"`
+	Image struct {
+		URL    string `json:"url"`
+		Detail string `json:"detail,omitempty"`
+	} `json:"image_url,omitempty"`
+}
+
+type chatmsg struct {
+	Messages  []Message `json:"messages"`
+	Model     string    `json:"model"`
+	Stream    bool      `json:"stream"`
+	User      string    `json:"user"`
+	MaxTokens int       `json:"max_tokens"`
+}
+
+func (m *chatmsg) CountToken(bpe *tiktoken.BPE) (int, error) {
+	var n int
+	for _, m := range m.Messages {
+		switch v := m.Content.(type) {
+		case string:
+			n += bpe.CountMessage([]map[string]string{
+				{
+					"role":    m.Role,
+					"content": v,
+				},
+			})
+		case []TypedMessage:
+			for _, m := range v {
+				switch m.Type {
+				case "text":
+					n += bpe.CountMessage([]map[string]string{
+						{
+							"type":    "text",
+							"content": m.Text,
+						},
+					})
+				case "image_url":
+					c, err := openImageConfig(m.Image.URL)
+					if err != nil {
+						return 0, err
+					}
+
+					sw, sh := scaleImage(c.Width, c.Height)
+					m := countTiles(sw, sh, 512)
+					n += 100 + m*300 + 100
+				}
+			}
+		default:
+			return 0, errors.New("invalid message")
+		}
+	}
+	return n, nil
+}
+
+func openImageConfig(url string) (image.Config, error) {
+	var img io.Reader
+	if strings.HasPrefix(url, "http") {
+		r, err := http.Get(url)
+		if err != nil {
+			return image.Config{}, err
+		}
+		if r.StatusCode != http.StatusOK {
+			return image.Config{}, errors.New("download error")
+		}
+		img = r.Body
+	} else {
+		i := strings.Index(url, ",")
+		if i == -1 {
+			return image.Config{}, errors.New("invalid data url")
+		}
+		data := url[i+1:]
+		b, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return image.Config{}, err
+		}
+		img = bytes.NewReader(b)
+	}
+
+	c, _, err := image.DecodeConfig(img)
+	if err != nil {
+		return image.Config{}, err
+	}
+
+	return c, nil
+}
+
+func scaleImage(width, height int) (int, int) {
+	const maxSize = 2048
+	const minSide = 768
+
+	// Scale to fit within 2048 x 2048 square
+	if width > height {
+		if width > maxSize {
+			scaleFactor := float64(maxSize) / float64(width)
+			width = maxSize
+			height = int(float64(height) * scaleFactor)
+		}
+	} else {
+		if height > maxSize {
+			scaleFactor := float64(maxSize) / float64(height)
+			height = maxSize
+			width = int(float64(width) * scaleFactor)
+		}
+	}
+
+	// Ensure the shortest side is at least 768px
+	if width < height {
+		if width < minSide {
+			scaleFactor := float64(minSide) / float64(width)
+			width = minSide
+			height = int(float64(height) * scaleFactor)
+		}
+	} else {
+		if height < minSide {
+			scaleFactor := float64(minSide) / float64(height)
+			height = minSide
+			width = int(float64(width) * scaleFactor)
+		}
+	}
+
+	return width, height
+}
+
+// countTiles returns the number of 512px squares the image consists of.
+func countTiles(width, height, tileSize int) int {
+	return int(math.Ceil(float64(width)/float64(tileSize)) * math.Ceil(float64(height)/float64(tileSize)))
+}
+
 type _msg struct {
 	chatmsg
 	Sign    string    `json:"_sign,omitempty"`
@@ -120,8 +288,8 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 
 		var buf bytes.Buffer
 		for _, m := range msg.Messages {
-			buf.WriteString(m["role"])
-			buf.WriteString(m["content"])
+			buf.WriteString(m.Role)
+			buf.WriteString(m.Content.(string))
 		}
 		buf.WriteString(strconv.Itoa(msg.UserID))
 		buf.WriteString(msg.Created.UTC().Format("2006-01-02T15:04:05.000Z"))
@@ -218,7 +386,12 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		}
 	}()
 
-	u.Usage.PromptTokens = p.bpe(msg.Model).CountMessage(msg.Messages)
+	u.Usage.PromptTokens, err = msg.CountToken(p.bpe(msg.Model))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	if maxTokens <= u.Usage.PromptTokens {
 		w.WriteHeader(http.StatusPaymentRequired)
@@ -325,7 +498,7 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 }
 
 func (p *Proxy) image(w http.ResponseWriter, req *http.Request, f *FileHandler, msg _msg, hash [32]byte) {
-	prompt := msg.Messages[len(msg.Messages)-1]["content"]
+	prompt := msg.Messages[len(msg.Messages)-1].Content.(string)
 	model := msg.Model
 	quality := "standard"
 	var size string
