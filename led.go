@@ -185,7 +185,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(req.RequestURI, "/+/chat") && req.Method == http.MethodPost {
+		if strings.HasPrefix(req.RequestURI, "/+/chat") {
+			h := w.Header()
+			h.Add("Access-Control-Allow-Origin", req.Header.Get("Origin"))
+			h.Add("Access-Control-Allow-Methods", "POST, OPTIONS")
+			h.Add("Access-Control-Allow-Headers", "*")
+			h.Add("Access-Control-Max-Age", "86400")
+			if req.Method == http.MethodOptions {
+				return
+			}
 			p.chat(w, req, f)
 			return
 		}
