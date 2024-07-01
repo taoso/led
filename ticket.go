@@ -47,18 +47,18 @@ func (h *Proxy) ServeTicket(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var bytes int
-		var months int
+		var days int
 		const GB = 1024 * 1024 * 1024
 		switch req.Cents {
 		case 200:
 			bytes = 2 * GB
-			months = 1
+			days = 30
 		case 400:
 			bytes = 8 * GB
-			months = 2
+			days = 60
 		case 800:
 			bytes = 32 * GB
-			months = 3
+			days = 90
 		default:
 			http.Error(w, "cents must in [200,400,800]", http.StatusBadRequest)
 			return
@@ -78,11 +78,11 @@ func (h *Proxy) ServeTicket(w http.ResponseWriter, r *http.Request) {
 		yuan := strconv.FormatFloat(float64(req.Cents)/100, 'f', 2, 64)
 
 		o := pay.Order{
-			Subject:   fmt.Sprintf("Traffic: %dGB@%dM", bytes/GB, months),
+			Subject:   fmt.Sprintf("Traffic: %dGB@%dd", bytes/GB, days),
 			TradeNo:   req.Token + "@" + now,
 			Amount:    yuan,
 			NotifyURL: "https://" + r.Host + r.URL.Path,
-			Extra:     fmt.Sprintf(`{"bytes":%d,"months":%d}`, bytes, months),
+			Extra:     fmt.Sprintf(`{"bytes":%d,"days":%d}`, bytes, days),
 		}
 
 		qr, err := h.Alipay.CreateQR(o)
@@ -110,6 +110,7 @@ func (h *Proxy) ServeTicket(w http.ResponseWriter, r *http.Request) {
 		var extra struct {
 			Bytes  int `json:"bytes"`
 			Months int `json:"months"`
+			Days   int `json:"days"`
 		}
 
 		err = json.Unmarshal([]byte(o.PassbackParams), &extra)
@@ -118,7 +119,11 @@ func (h *Proxy) ServeTicket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = h.TicketRepo.New(token, extra.Bytes, extra.Months, o.OutTradeNo, o.TradeNo)
+		if extra.Months > 0 {
+			extra.Days = extra.Months * 30
+		}
+
+		err = h.TicketRepo.New(token, extra.Bytes, extra.Days, o.OutTradeNo, o.TradeNo)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
