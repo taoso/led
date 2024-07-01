@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRepo(t *testing.T) {
+func TestTicketRepo(t *testing.T) {
 	r := NewTicketRepo(":memory:")
 
 	err := r.New("foo", 100, 1, "buy-1", "pay-1")
@@ -22,15 +22,15 @@ func TestRepo(t *testing.T) {
 	assert.Equal(t, "pay-1", ts[0].PayOrder)
 
 	n := time.Now()
-	exp := n.AddDate(0, 1, -n.Day()+1)
-	year, month, day := exp.Date()
-	exp = time.Date(year, month, day, 0, 0, 0, 0, exp.Location())
-	assert.Equal(t, exp, ts[0].Expires)
+	exp := n.AddDate(0, 0, 1)
+	assert.Equal(t, exp.Truncate(time.Second), ts[0].Expires.Truncate(time.Second))
 	assert.Equal(t, ts[0].Created, ts[0].Updated)
 	assert.Equal(t, n.Truncate(time.Second), ts[0].Created.Truncate(time.Second))
 
 	err = r.Cost("foo", 50)
 	assert.Nil(t, err)
+	n = time.Now()
+	assert.Equal(t, n.Truncate(time.Second), ts[0].Updated.Truncate(time.Second))
 
 	ts, err = r.List("foo", 2)
 	assert.Nil(t, err)
@@ -74,7 +74,7 @@ func TestRepo(t *testing.T) {
 	assert.Equal(t, -15, ts[0].Bytes)
 }
 
-func TestRepoSlow(t *testing.T) {
+func TestTicketRepoSlow(t *testing.T) {
 	r := NewTicketRepo(":memory:")
 
 	err := r.New("foo", 10, 1, "buy-1", "pay-1")

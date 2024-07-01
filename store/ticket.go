@@ -41,7 +41,7 @@ func (t *Ticket) Schema() string {
 
 type TicketRepo interface {
 	// New create and save one Ticket
-	New(token string, bytes, months int, trade string, order string) error
+	New(token string, bytes, days int, trade string, order string) error
 	// Cost decreases  bytes of one Ticket
 	Cost(token string, bytes int) error
 	// List fetches all current Tickets with bytes available.
@@ -61,7 +61,7 @@ func NewTicketRepo(path string) TicketRepo {
 
 type FreeTicketRepo struct{}
 
-func (r FreeTicketRepo) New(token string, bytes, months int, trade, order string) error {
+func (r FreeTicketRepo) New(token string, bytes, days int, trade, order string) error {
 	return nil
 }
 
@@ -83,14 +83,18 @@ func (r sqliteTicketReop) Init() {
 	}
 }
 
-func expires(t time.Time, months int) time.Time {
-	t = t.AddDate(0, months, -t.Day()+1)
-	year, month, day := t.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
-}
-
-func (r sqliteTicketReop) New(token string, bytes, months int, trade, order string) error {
+func (r sqliteTicketReop) New(token string, bytes, days int, trade, order string) error {
 	now := time.Now()
+	begin := time.Now()
+
+	ts, err := r.List(token, 1)
+	if err != nil {
+		return err
+	}
+
+	if len(ts) == 1 {
+		begin = ts[0].Expires
+	}
 
 	t := Ticket{
 		Token:      token,
@@ -100,10 +104,10 @@ func (r sqliteTicketReop) New(token string, bytes, months int, trade, order stri
 		BuyOrder:   trade,
 		Created:    now,
 		Updated:    now,
-		Expires:    expires(now, months),
+		Expires:    begin.AddDate(0, 0, days),
 	}
 
-	_, err := r.db.Insert(&t)
+	_, err = r.db.Insert(&t)
 
 	se := &sqlite.Error{}
 	// constraint failed: UNIQUE constraint failed
