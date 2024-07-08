@@ -113,6 +113,25 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Method == http.MethodConnect {
+		auth := req.Header.Get("Proxy-Authorization")
+		username, password, ok := parseBasicAuth(auth)
+		if username != "" {
+			req.URL.User = url.User(username)
+		}
+		if !ok || !p.auth(username, password) {
+			w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
+			w.WriteHeader(http.StatusProxyAuthRequired)
+			return
+		}
+		if req.Proto == "connect-udp" {
+			p.proxyUDP(w, req)
+		} else {
+			p.proxyHTTPS(w, req)
+		}
+		return
+	}
+
 	w.Header().Set("Alt-Svc", p.AltSvc)
 	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 
@@ -127,34 +146,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_, port, _ := net.SplitHostPort(req.RemoteAddr)
 		req.RemoteAddr = ip + ":" + port
 	}
-
-	if p.serveLocal(w, req) {
-		return
-	}
-
-	auth := req.Header.Get("Proxy-Authorization")
-	username, password, ok := parseBasicAuth(auth)
-	if username != "" {
-		req.URL.User = url.User(username)
-	}
-	if !ok || !p.auth(username, password) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
-		w.WriteHeader(http.StatusProxyAuthRequired)
-		return
-	}
-
-	if req.Method == http.MethodConnect {
-		if req.Proto == "connect-udp" {
-			p.proxyUDP(w, req)
-		} else {
-			p.proxyHTTPS(w, req)
-		}
-	} else {
-		proxyHTTP(w, req)
-	}
+	p.serveLocal(w, req)
 }
 
-func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) (b404 bool) {
+func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	if f := p.sites[p.host(req.Host)]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -305,9 +300,8 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) (b404 bool)
 		}
 
 		f.fs.ServeHTTP(w, req)
-		return true
+		return
 	}
-	return false
 }
 
 func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
