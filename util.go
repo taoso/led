@@ -7,7 +7,7 @@ import (
 )
 
 type bytesCounter struct {
-	w io.Writer
+	w io.ReadWriter
 	f func(n int)
 	d time.Duration
 
@@ -41,6 +41,13 @@ func (bc *bytesCounter) Start() {
 }
 
 func (bc *bytesCounter) Write(p []byte) (n int, err error) {
-	bc.c.Add(int64(len(p)))
-	return bc.w.Write(p)
+	n, err = bc.w.Write(p)
+	bc.c.Add(int64(n))
+	return
+}
+
+func (bc *bytesCounter) Read(p []byte) (n int, err error) {
+	n, err = bc.w.Read(p)
+	bc.c.Add(int64(n))
+	return
 }

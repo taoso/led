@@ -25,10 +25,14 @@ func TestBytesCounter(t *testing.T) {
 		bc.Write([]byte(s))
 	}
 
+	var p [20]byte
+	n, _ := bc.Read(p[:])
+	s := string(p[:n])
+
 	time.Sleep(1 * time.Second)
 
 	bc.Done()
 
-	assert.Equal(t, 6, i)
-	assert.Equal(t, "abcdef", b.String())
+	assert.Equal(t, 12, i)
+	assert.Equal(t, "abcdef", s)
 }

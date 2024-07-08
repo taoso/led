@@ -145,7 +145,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == http.MethodConnect {
 		if req.Proto == "connect-udp" {
-			proxyUDP(w, req)
+			p.proxyUDP(w, req)
 		} else {
 			p.proxyHTTPS(w, req)
 		}
@@ -411,7 +411,7 @@ func (p *Proxy) api2(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	}
 }
 
-func proxyUDP(w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) proxyUDP(w http.ResponseWriter, req *http.Request) {
 	if req.ProtoMajor < 3 {
 		w.WriteHeader(http.StatusNotImplemented)
 		w.Write([]byte("does not support connect-udp over http/1.1 and h2"))
@@ -445,10 +445,34 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 	str := w.(http3.HTTPStreamer).HTTPStream()
 	defer str.Close()
 
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	user := req.URL.User.Username()
+
+	cost := func(n int) {}
+
+	if _, ok := p.users[user]; !ok {
+		cost = func(n int) {
+			err := p.TicketRepo.Cost(user, n)
+			if err != nil {
+				log.Println("ticket cost error: ", user, n, err)
+				str.Close()
+				up.Close()
+			}
+		}
+	}
+
+	u := &bytesCounter{w: up, d: 1 * time.Second, f: cost}
+
+	go u.Start()
+	defer u.Done()
+
 	go func() {
+		defer wg.Done()
 		b := make([]byte, 1500)
 		for {
-			n, err := up.Read(b[1:])
+			n, err := u.Read(b[1:])
 			if err != nil {
 				log.Println("up.Read err:", err)
 				return
@@ -461,25 +485,29 @@ func proxyUDP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	ctx := context.Background()
+	go func() {
+		defer wg.Done()
+		ctx := context.Background()
+		for {
+			b, err := str.ReceiveDatagram(ctx)
+			if err != nil {
+				log.Println("ReceiveDatagram err:", err)
+				return
+			}
+			_, n, err := quicvarint.Parse(b)
+			if err != nil {
+				log.Println("parse cid err:", err)
+				return
+			}
+			_, err = u.Write(b[n:])
+			if err != nil {
+				log.Println("up.Write err:", err)
+				return
+			}
+		}
+	}()
 
-	for {
-		b, err := str.ReceiveDatagram(ctx)
-		if err != nil {
-			log.Println("ReceiveDatagram err:", err)
-			return
-		}
-		_, n, err := quicvarint.Parse(b)
-		if err != nil {
-			log.Println("parse cid err:", err)
-			return
-		}
-		_, err = up.Write(b[n:])
-		if err != nil {
-			log.Println("up.Write err:", err)
-			return
-		}
-	}
+	wg.Wait()
 }
 
 func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
@@ -526,10 +554,9 @@ func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	}
 
 	u := &bytesCounter{w: upConn, d: 1 * time.Second, f: cost}
-	d := &bytesCounter{w: downConn, d: 1 * time.Second, f: cost}
 
 	go u.Start()
-	go d.Start()
+	defer u.Done()
 
 	go func() {
 		defer wg.Done()
@@ -537,13 +564,10 @@ func (p *Proxy) proxyHTTPS(w http.ResponseWriter, req *http.Request) {
 	}()
 	go func() {
 		defer wg.Done()
-		io.Copy(d, upConn)
+		io.Copy(downConn, u)
 	}()
 
 	wg.Wait()
-
-	u.Done()
-	d.Done()
 }
 
 func proxyHTTP(w http.ResponseWriter, req *http.Request) {
