@@ -66,7 +66,7 @@ func (p *Proxy) auth(username, password string) bool {
 			log.Println("ticket list error: ", username, err)
 			return false
 		}
-		if len(ts) == 0 || ts[0].Bytes <= 0 {
+		if len(ts) == 0 || ts[0].Bytes <= 0 || ts[0].Expires.Before(time.Now()) {
 			return false
 		}
 		return true
