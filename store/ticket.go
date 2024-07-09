@@ -149,6 +149,10 @@ func (r sqliteTicketReop) costSlow(token string, bytes int) error {
 		return err
 	}
 
+	if len(ts) == 0 {
+		return errors.New("no tickets found")
+	}
+
 	var i int
 	var t Ticket
 	for i, t = range ts {
