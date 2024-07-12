@@ -1,11 +1,12 @@
 package led
 
 import (
-	"net"
+	"bytes"
 	"net/http"
-	"net/smtp"
 	"os"
 
+	"github.com/emersion/go-sasl"
+	"github.com/emersion/go-smtp"
 	"github.com/jhillyerd/enmime"
 	"github.com/joho/godotenv"
 )
@@ -35,12 +36,25 @@ func (h *FileHandler) Comment(w http.ResponseWriter, req *http.Request) {
 		Subject(f.Get("subject")).
 		Text([]byte(content))
 
-	addr := os.Getenv("SMTP_HOST")
-	host, _, err := net.SplitHostPort(addr)
-	auth := smtp.PlainAuth("", os.Getenv("SMTP_USER"), os.Getenv("SMTP_PASS"), host)
+	s := TLSSender{
+		Username: os.Getenv("SMTP_USER"),
+		Password: os.Getenv("SMTP_PASS"),
+		Hostaddr: os.Getenv("SMTP_HOST"),
+	}
 
-	if err = m.Send(enmime.NewSMTP(addr, auth)); err != nil {
+	if err = m.Send(s); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 	}
+}
+
+type TLSSender struct {
+	Username string
+	Password string
+	Hostaddr string
+}
+
+func (s TLSSender) Send(reversePath string, recipients []string, msg []byte) error {
+	auth := sasl.NewPlainClient("", s.Username, s.Password)
+	return smtp.SendMailTLS(s.Hostaddr, auth, reversePath, recipients, bytes.NewReader(msg))
 }

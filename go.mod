@@ -5,12 +5,14 @@ go 1.21
 require (
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/SherClockHolmes/webpush-go v1.2.0
+	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
+	github.com/emersion/go-smtp v0.21.3
 	github.com/felixge/httpsnoop v1.0.3
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
 	github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400
 	github.com/gorilla/handlers v1.5.1
 	github.com/hashicorp/golang-lru/v2 v2.0.2
-	github.com/jhillyerd/enmime v0.10.1
+	github.com/jhillyerd/enmime v1.2.0
 	github.com/joho/godotenv v1.5.1
 	github.com/quic-go/quic-go v0.45.1
 	github.com/smartwalle/alipay/v3 v3.2.1
@@ -32,12 +34,12 @@ require (
 	github.com/google/pprof v0.0.0-20221219190121-3cb0bae90811 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/huandu/go-tls v1.0.1 // indirect
-	github.com/jaytaylor/html2text v0.0.0-20211105163654-bc68cce691ba // indirect
+	github.com/jaytaylor/html2text v0.0.0-20230321000545-74c2419ad056 // indirect
 	github.com/jmoiron/sqlx v1.3.4 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
-	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
