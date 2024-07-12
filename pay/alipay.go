@@ -1,6 +1,7 @@
 package pay
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -34,7 +35,7 @@ type Order struct {
 
 // CreateQR 创建二维码支付订单
 func (ali *Alipay) CreateQR(o Order) (string, error) {
-	r, err := ali.client.TradePreCreate(alipay.TradePreCreate{
+	r, err := ali.client.TradePreCreate(context.TODO(), alipay.TradePreCreate{
 		Trade: alipay.Trade{
 			NotifyURL:      o.NotifyURL,
 			Subject:        o.Subject,
@@ -48,18 +49,14 @@ func (ali *Alipay) CreateQR(o Order) (string, error) {
 		return "", err
 	}
 
-	if r.Content.Code != alipay.CodeSuccess {
+	if r.Code != alipay.CodeSuccess {
 		return "", fmt.Errorf("TradePreCreate error: %w", err)
 	}
 
-	return r.Content.QRCode, nil
+	return r.QRCode, nil
 }
 
-func (ali *Alipay) GetNotification(req *http.Request) (n alipay.TradeNotification, err error) {
-	v, err := ali.client.GetTradeNotification(req)
-	if err != nil {
-		return
-	}
-	n = *v
+func (ali *Alipay) GetNotification(req *http.Request) (n *alipay.Notification, err error) {
+	n, err = ali.client.GetTradeNotification(req)
 	return
 }
