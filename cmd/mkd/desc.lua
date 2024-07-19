@@ -243,10 +243,12 @@ return {{
   CodeBlock = code_to_figure,
   Blocks = get_description,
   Meta = function (meta)
-    local p = PANDOC_STATE.input_files[1]
-    local _, c = p:gsub("/", "")
     local r = ''
-    for i=1,c do r = r .. "../" end
+    local p = PANDOC_STATE.input_files[1]
+    if p ~= "/dev/null" then
+      local _, c = p:gsub("/", "")
+      for i=1,c do r = r .. "../" end
+    end
     meta.root = r
     meta.description = description
     meta.runes = string.format("%0.1f", runes/1000)
