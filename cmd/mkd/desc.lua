@@ -248,6 +248,8 @@ return {{
     if p ~= "/dev/null" then
       local _, c = p:gsub("/", "")
       for i=1,c do r = r .. "../" end
+    else
+      r = '/'
     end
     meta.root = r
     meta.description = description
