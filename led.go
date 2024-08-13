@@ -113,8 +113,8 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodConnect {
-		auth := req.Header.Get("Proxy-Authorization")
+	auth := req.Header.Get("Proxy-Authorization")
+	if auth != "" {
 		username, password, ok := parseBasicAuth(auth)
 		if username != "" {
 			req.URL.User = url.User(username)
@@ -124,11 +124,20 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusProxyAuthRequired)
 			return
 		}
-		if req.Proto == "connect-udp" {
-			p.proxyUDP(w, req)
+		if req.Method == http.MethodConnect {
+			if req.Proto == "connect-udp" {
+				p.proxyUDP(w, req)
+			} else {
+				p.proxyHTTPS(w, req)
+			}
+			return
 		} else {
-			p.proxyHTTPS(w, req)
+			proxyHTTP(w, req)
+			return
 		}
+	} else if req.Method == http.MethodConnect {
+		w.Header().Set("Proxy-Authenticate", `Basic realm="Word Wide Web"`)
+		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
 
