@@ -6,7 +6,7 @@ grep $device_id /usr/local/etc/lehu/sites.txt | cut -d: -f1 | while read domain;
         curl -s -H x-api-key:$api_key $host/rest/config/devices -d '{"deviceID":"'$device_id'"}'
 	folder=~/sync/$domain
 	if [[ ! -d $folder ]]; then
-		cp -R ~/sync/lehu.in $folder
+		cp -R ~/sync/pages.lehu.in $folder
 		sed -E -i "s/lehu\.in/$domain" $folder/env
 	fi
 
