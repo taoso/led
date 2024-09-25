@@ -1,4 +1,4 @@
-MDs := $(shell find . -name '*.md')
+MDs := $(shell find . -name '*.md' -not -path '* *')
 HTMLs := $(MDs:.md=.htm)
 METAs := $(MDs:.md=.yml)
 
