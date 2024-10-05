@@ -262,6 +262,8 @@ return {{
     h:close()
     meta.updated = r:match("%d+")
 
+    meta.path = "/"..p:sub(1,-3).."html"
+
     local envs = pandoc.system.environment()
     for k,v in pairs(envs) do
       if meta[k] == nil then
