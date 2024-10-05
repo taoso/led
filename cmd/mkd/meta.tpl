@@ -1,1 +1,1 @@
-- { "date": "$date$", "path": "$path$", "title": "$title$", "desc": "$desc$", "updated": "$updated$" }
+- { "date": "$date$", "path": "$path$", "title": "$title$", "desc": "$desc$", "tags": [$for(tags)$"$tags$"$sep$, $endfor$], "refs": [$for(refs)$"$refs$"$sep$, $endfor$] }
