@@ -274,7 +274,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(req.URL.Path, "/+/dav/") {
+		if strings.HasPrefix(req.URL.Path, "/+/dav") {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
 				req.URL.User = url.User(username)
