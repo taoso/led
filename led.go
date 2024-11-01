@@ -274,6 +274,12 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		// macos finder 会发送大量 PROPFIND 请求，查询 ._XXX 文件😂
+		if strings.HasPrefix(req.URL.Path, "/+/dav/._") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		if strings.HasPrefix(req.URL.Path, "/+/dav") {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
