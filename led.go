@@ -289,7 +289,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				switch req.Method {
 				case "DELETE", "MOVE":
 					e = "-" + f.Name + req.URL.Path[len("/+/dav"):]
-				case "COPY", "PUT", "PROPPATCH":
+				case "COPY", "PUT":
 					e = "+" + f.Name
 				}
 
