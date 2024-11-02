@@ -162,7 +162,6 @@ func main() {
 	}
 
 	tlsCfg := acm.TLSConfig()
-	tlsCfg.NextProtos = []string{"http/1.1", "acme-tls/1"}
 
 	if lnH3 != nil {
 		p := lnH3.LocalAddr().(*net.UDPAddr).Port
