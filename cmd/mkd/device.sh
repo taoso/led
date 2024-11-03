@@ -37,6 +37,7 @@ EOF
 	     "*.swp",
 	     "*.tmp",
 	     "*.yml",
+	     "*.[0-9]*.svg",
 	     ".#*",
 	     ".DS_Store",
 	     "feed.xml",
