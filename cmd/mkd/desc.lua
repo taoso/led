@@ -247,9 +247,44 @@ local function code_to_figure (block)
     pandoc.Plain{image}
 end
 
+function github_alerts (block)
+  local para = block.content[1]
+  if not para then return nil end
+  local str = para.content[1]
+  if not str then return nil end
+
+  local new_alert = function (icon, name)
+    return pandoc.Span({
+      pandoc.Span(icon, {class="icon"}),
+      pandoc.Span(name, {class="alert"}),
+    }, {class="alerting "..name})
+  end
+
+  local i = string.lower(str.text)
+  if i == '[!note]' then
+    t = new_alert("✏️", "Note")
+  elseif i == '[!tip]' then
+    t = new_alert("💡", "Tip")
+  elseif i == '[!important]' then
+    t = new_alert("⚠️", "Important")
+  elseif i == '[!warning]' then
+    t = new_alert("⛔", "Warning")
+  elseif i == '[!caution]' then
+    t = new_alert("🚨", "Caution")
+  else
+    return nil
+  end
+  table.remove(block.content[1].content, 1)
+  table.remove(block.content[1].content, 1)
+  table.insert(block.content, 1, t)
+
+  return block
+end
+
 return {{
   CodeBlock = code_to_figure,
   Blocks = get_description,
+  BlockQuote = github_alerts,
   Meta = function (meta)
     local r = ''
     local p = PANDOC_STATE.input_files[1]
