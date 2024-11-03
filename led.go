@@ -21,6 +21,7 @@ import (
 	"github.com/taoso/led/pay"
 	"github.com/taoso/led/store"
 	"github.com/taoso/led/tiktoken"
+	"github.com/taoso/led/ws"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/idna"
 )
@@ -114,7 +115,7 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Header.Get("Connection") == "Upgrade" && req.Header.Get("Upgrade") == "websocket" && strings.HasPrefix(req.RequestURI, "/ws/") {
-		p.proxyWebSocket(w, req)
+		ws.ProxyWebSocket(w, req)
 		return
 	}
 
@@ -623,10 +624,6 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 	return
-}
-
-func (p *Proxy) proxyWebSocket(w http.ResponseWriter, req *http.Request) {
-	// io.Copy(w, resp.Body)
 }
 
 type flushWriter struct {
