@@ -191,7 +191,15 @@ local function code_to_figure (block)
 
   local engine = engines[diagram_type]
   if not engine then
-    return nil
+    local img = block.attributes["img"]
+    if not img then
+      return nil
+    end
+    diagram_type = diagram_type.."."..img
+    engine = engines[diagram_type]
+    if not engine then
+      return nil
+    end
   end
 
   -- Unified properties.
