@@ -113,6 +113,11 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("Connection") == "Upgrade" && req.Header.Get("Upgrade") == "websocket" && strings.HasPrefix(req.RequestURI, "/ws/") {
+		p.proxyWebSocket(w, req)
+		return
+	}
+
 	auth := req.Header.Get("Proxy-Authorization")
 	if auth != "" {
 		username, password, ok := parseBasicAuth(auth)
@@ -618,6 +623,10 @@ func proxyHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 	return
+}
+
+func (p *Proxy) proxyWebSocket(w http.ResponseWriter, req *http.Request) {
+	// io.Copy(w, resp.Body)
 }
 
 type flushWriter struct {
