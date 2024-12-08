@@ -107,7 +107,7 @@ type chatmsg struct {
 	Model     string    `json:"model"`
 	Stream    bool      `json:"stream"`
 	User      string    `json:"user"`
-	MaxTokens int       `json:"max_tokens"`
+	MaxTokens int       `json:"max_completion_tokens"`
 }
 
 func (m *chatmsg) CountToken(bpe *tiktoken.BPE) (int, error) {
@@ -335,6 +335,14 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	case "gpt-4o-mini":
 		tokenRate = 1
 		msg.Model = "gpt-4o-mini"
+		maxTokens = 4 * 1024
+	case "o1-preview":
+		tokenRate = 25
+		msg.Model = "o1-preview"
+		maxTokens = 4 * 1024
+	case "o1-mini":
+		tokenRate = 5
+		msg.Model = "o1-mini"
 		maxTokens = 4 * 1024
 	default:
 		w.WriteHeader(http.StatusBadRequest)
