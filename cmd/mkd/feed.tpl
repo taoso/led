@@ -8,7 +8,7 @@
   </author>
   <link href="$site_url$"/>
   <link href="$site_url$/feed.xml" rel="self"/>
-  <updated>$updated$</updated>
+  <updated>$all_updated$</updated>
   $for(articles)$
   <entry>
     <id>$site_url$$it.path$</id>

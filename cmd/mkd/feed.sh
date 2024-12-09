@@ -17,14 +17,13 @@ fi
 head -n 12 $1/index.yml > $1/feed.yml
 
 pandoc -s -p -f markdown -t html --wrap=none \
-	--metadata=updated:$updated \
+	--metadata=all_updated:$updated \
 	--metadata-file=$1/feed.yml \
 	--template $ROOT_DIR/feed.tpl \
 	--lua-filter $LUA_FILTER \
 	-o $1/feed.xml /dev/null
 
 pandoc -s -p -f markdown -t html --wrap=none \
-	--metadata=updated:$updated \
 	--metadata-file=$1/index.yml \
 	--template $ROOT_DIR/map.tpl \
 	--lua-filter $LUA_FILTER \
