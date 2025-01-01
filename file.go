@@ -69,8 +69,15 @@ func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
 		oldURL := parts[0]
 		newURL := parts[1]
 
-		if req.URL.Path == oldURL {
-			http.Redirect(w, req, newURL, http.StatusMovedPermanently)
+		if strings.HasPrefix(req.URL.Path, oldURL) {
+			code := http.StatusMovedPermanently
+
+			if strings.HasPrefix(newURL, "@") {
+				newURL = newURL[1:]
+				code = http.StatusTemporaryRedirect
+			}
+
+			http.Redirect(w, req, newURL, code)
 			return true
 		}
 	}
