@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <title>ZZ.AC Zone Editor</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+  </head>
+  <style>
+.grow-wrap {
+  display: grid;
+}
+.grow-wrap::after {
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  visibility: hidden;
+}
+.grow-wrap > textarea, .grow-wrap::after {
+  padding: 0.35rem;
+  fone-size: 1em;
+  line-height: 1.4;
+  overflow: hidden;
+  resize: none;
+
+  grid-area: 1 / 1 / 2 / 2;
+}
+.msg {
+  margin: 1em 0;
+  font-weight: bold;
+}
+
+.msg.error {
+  color: red;
+}
+
+.msg.info {
+  color: blue;
+}
+  </style>
+  <body>
+    <form method="post" action="">
+      <label for="zone">RFC1035 Zone of {{.Domain}}</label>
+      <div class="grow-wrap">
+        <textarea
+          rows="7"
+          name="zone"
+          id="zone"
+          onInput="this.parentNode.dataset.replicatedValue = this.value">{{.Zone}}</textarea>
+      </div>
+      {{if .Error}}
+      <div class="msg error">{{.Error}}</div>
+      {{end}}
+      {{if .Msg }}
+      <div class="msg info">{{.Msg}}</div>
+      {{end}}
+      <button type="submit">Save</button>
+    </form>
+    <script>
+    document.querySelectorAll('.grow-wrap').forEach(wrap => {
+      wrap.setAttribute('data-replicated-value', wrap.querySelector('textarea').value);
+    });
+    </script>
+  </body>
+</html>
