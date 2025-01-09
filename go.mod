@@ -14,6 +14,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jhillyerd/enmime v1.3.0
 	github.com/joho/godotenv v1.5.1
+	github.com/miekg/dns v1.1.62
 	github.com/quic-go/quic-go v0.48.1
 	github.com/smartwalle/alipay/v3 v3.2.23
 	github.com/stretchr/testify v1.9.0

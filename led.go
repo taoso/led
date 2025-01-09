@@ -29,6 +29,11 @@ import (
 type Proxy struct {
 	sites map[string]*FileHandler
 	users map[string]string
+	zones map[string]string
+
+	zPath string
+
+	signKey []byte
 
 	BPEs map[string]*tiktoken.BPE
 
@@ -86,6 +91,23 @@ func (p *Proxy) SetSites(sites map[string]string) {
 	}
 
 	p.sites = hs
+}
+
+func (p *Proxy) SetZone(zones map[string]string) {
+	// domain => email
+	p.zones = zones
+}
+
+func (p *Proxy) SetZonePath(path string) {
+	p.zPath = path
+}
+
+func (p *Proxy) SetKey(key string) {
+	k, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		panic(err)
+	}
+	p.signKey = k
 }
 
 func (p *Proxy) MySite(name string) bool {
@@ -301,6 +323,11 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 			f.dav.ServeHTTP(w, req)
+			return
+		}
+
+		if strings.HasPrefix(req.URL.Path, "/+/zone") {
+			p.zone(w, req)
 			return
 		}
 
