@@ -94,8 +94,13 @@ func (p *Proxy) SetSites(sites map[string]string) {
 }
 
 func (p *Proxy) SetZone(zones map[string]string) {
-	// domain => email
-	p.zones = zones
+	z := make(map[string]string, len(zones))
+	for domain, s := range zones {
+		p := strings.Split(s, ",")
+		email := p[0]
+		z[domain] = email
+	}
+	p.zones = z
 }
 
 func (p *Proxy) SetZonePath(path string) {
