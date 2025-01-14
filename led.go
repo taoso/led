@@ -29,7 +29,7 @@ import (
 type Proxy struct {
 	sites map[string]*FileHandler
 	users map[string]string
-	zones map[string]string
+	zones map[string]Zone
 
 	zPath string
 
@@ -94,13 +94,19 @@ func (p *Proxy) SetSites(sites map[string]string) {
 }
 
 func (p *Proxy) SetZone(zones map[string]string) {
-	z := make(map[string]string, len(zones))
+	zs := make(map[string]Zone, len(zones))
 	for domain, s := range zones {
 		p := strings.Split(s, ",")
-		email := p[0]
-		z[domain] = email
+
+		zs[domain] = Zone{
+			Domain: domain,
+			Email:  p[0],
+			Owner:  p[1],
+			Desc:   p[2],
+			Date:   p[3],
+		}
 	}
-	p.zones = z
+	p.zones = zs
 }
 
 func (p *Proxy) SetZonePath(path string) {
