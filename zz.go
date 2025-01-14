@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,9 +21,22 @@ import (
 //go:embed *.html
 var htmls embed.FS
 
+type Zone struct {
+	Domain string
+	Email  string
+	Owner  string
+	Desc   string
+	Date   string
+}
+
 func (p *Proxy) zone(w http.ResponseWriter, req *http.Request) {
-	if a := req.FormValue("a"); a == "link" {
+	a := req.FormValue("a")
+	switch a {
+	case "link":
 		p.zoneLink(w, req)
+		return
+	case "whois":
+		p.zoneWhois(w, req)
 		return
 	}
 
@@ -68,7 +82,7 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 	email := req.FormValue("e")
 	domain := req.FormValue("d")
 
-	if p.zones[domain] != email {
+	if p.zones[domain].Email != email {
 		http.Error(w, "invalid argument", http.StatusBadRequest)
 		return
 	}
@@ -139,6 +153,16 @@ func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
 		Zone:   string(b),
 		Domain: name + ".zz.ac",
 	})
+}
+
+func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
+	name := req.FormValue("n")
+
+	z := p.zones[name]
+
+	w.Header().Set("content-type", "application/json");
+
+	json.NewEncoder(w).Encode(z)
 }
 
 func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
