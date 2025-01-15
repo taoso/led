@@ -11,14 +11,7 @@ export LUA_FILTER = $(PWD)/desc.lua
 	$(PWD)/meta.sh $< > $@
 
 %.htm: %.md ./head.tpl ./footer.tpl ./article.tpl
-	pandoc -s -p --wrap=none \
-		--toc \
-		--mathml \
-		--template article.tpl \
-		--highlight-style=pygments \
-		--lua-filter $(LUA_FILTER) \
-		--from markdown+east_asian_line_breaks \
-		$< -o $@
+	$(PWD)/article.sh $< $@
 
 index: $(METAs)
 	$(PWD)/index.sh .
