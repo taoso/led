@@ -47,7 +47,12 @@ end
 return {{
   Blocks = get_description,
   Meta = function (meta)
-    meta.desc = description
+    if meta.desc ~= nil then
+      meta.description = pandoc.utils.stringify(meta.desc)
+    end
+    if meta.description == nil then
+      meta.description = description
+    end
     local path = "/"..PANDOC_STATE.input_files[1]
     meta.path = path:sub(1,-3).."html"
 
