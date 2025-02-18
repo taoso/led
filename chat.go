@@ -336,13 +336,18 @@ func (p *Proxy) chat(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 		tokenRate = 1
 		msg.Model = "gpt-4o-mini"
 		maxTokens = 4 * 1024
+	case "o1":
 	case "o1-preview":
 		tokenRate = 25
-		msg.Model = "o1-preview"
+		msg.Model = "o1"
 		maxTokens = 4 * 1024
 	case "o1-mini":
 		tokenRate = 5
 		msg.Model = "o1-mini"
+		maxTokens = 4 * 1024
+	case "o3-mini":
+		tokenRate = 5
+		msg.Model = "o3-mini"
 		maxTokens = 4 * 1024
 	default:
 		w.WriteHeader(http.StatusBadRequest)
