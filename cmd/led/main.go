@@ -273,6 +273,9 @@ func loadfile(path string) (map[string]string, error) {
 	kv := map[string]string{}
 	for s.Scan() {
 		l := s.Text()
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
 		i := strings.Index(l, ":")
 		if i == -1 {
 			i = len(l)
