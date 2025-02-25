@@ -160,7 +160,7 @@ func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 
 	z := p.zones[name]
 
-	w.Header().Set("content-type", "application/json");
+	w.Header().Set("content-type", "application/json")
 
 	json.NewEncoder(w).Encode(z)
 }
@@ -200,6 +200,8 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 func parseZone(origin, zone string) error {
 	f := strings.NewReader(zone)
 	zp := dns.NewZoneParser(f, origin, "")
+
+	zp.SetDefaultTTL(60)
 
 	for r, ok := zp.Next(); ok; r, ok = zp.Next() {
 		h := r.Header()
