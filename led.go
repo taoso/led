@@ -354,7 +354,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		domain := strings.Replace(host, ".zz.ac", "", 1)
 		root := p.Root + "/" + host
 
-		if req.Method == http.MethodGet || req.Method == http.MethodOptions {
+		if req.Method == http.MethodGet {
 			if strings.HasSuffix(req.URL.Path, "/") {
 				indexPath := filepath.Join(root, req.URL.Path, "index.html")
 				if _, err := os.Stat(indexPath); err == nil {
@@ -363,7 +363,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 					return
 				}
 			}
-		} else {
+		} else if req.Method != http.MethodOptions {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
 				req.URL.User = url.User(username)
