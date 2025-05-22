@@ -136,7 +136,7 @@ func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
 
 	name := req.FormValue("n")
 
-	db := p.zPath + "/" + name + ".zz.ac.zone"
+	db := p.zPath + "/zz.ac/" + name + ".zone"
 
 	b, err := os.ReadFile(db)
 	if err != nil && !os.IsNotExist(err) {
@@ -187,7 +187,7 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 
 	d.Error = parseZone(name+".zz.ac.", zone)
 	if d.Error == nil {
-		db := p.zPath + "/" + name + ".zz.ac.zone"
+		db := p.zPath + "/zz.ac/" + name + ".zone"
 		d.Error = os.WriteFile(db, []byte(zone), os.FileMode(0644))
 		if d.Error == nil {
 			d.Msg = "Zone updated."
