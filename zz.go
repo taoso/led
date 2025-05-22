@@ -82,7 +82,12 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 	email := req.FormValue("e")
 	domain := req.FormValue("d")
 
-	if p.zones[domain].Email != email {
+	z, err := p.ZoneRepo.Get(domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if z.Email != email {
 		http.Error(w, "invalid argument", http.StatusBadRequest)
 		return
 	}
@@ -158,9 +163,15 @@ func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 	name := req.FormValue("n")
 
-	z := p.zones[name]
+	z, err := p.ZoneRepo.Get(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("content-type", "application/json")
+
+	z.Email = "nic@zz.ac"
 
 	json.NewEncoder(w).Encode(z)
 }

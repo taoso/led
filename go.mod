@@ -11,7 +11,7 @@ require (
 	github.com/emersion/go-smtp v0.21.3
 	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
-	github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400
+	github.com/go-kiss/sqlx v0.0.0-20250514141631-7be2cb31cba2
 	github.com/gorilla/handlers v1.5.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jhillyerd/enmime v1.3.0

@@ -22,8 +22,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016 h1:zVPP7cBdYIhZR2rjpMZTdtz02uNrn6DBCxyPkNPz6mI=
 github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016/go.mod h1:kWkNPYD8nW3w7aov3dBtDJ6ULTIxcGpGZmQQRI7QlQY=
-github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400 h1:cAtmV0cOfF/f3wfU9kiXEjv8i+gq+MtbPA8DQOK26s0=
-github.com/go-kiss/sqlx v0.0.0-20230411140417-c05d9e94f400/go.mod h1:DnvW2GH6tGm10qYtk7ZAYVBIwyJHijLEi5NtcPwOTrE=
+github.com/go-kiss/sqlx v0.0.0-20250514141631-7be2cb31cba2 h1:UtYDAuXfuWHBZtzE97OEHokPKvwV+JP7J6POk+S2L8Q=
+github.com/go-kiss/sqlx v0.0.0-20250514141631-7be2cb31cba2/go.mod h1:ifMW4IAa4MhViphziwc/Onp3r1XPjAYkPHkUtDMaYeY=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-sql-driver/mysql v1.8.1 h1:LedoTUt/eveggdHS9qUFC1EFSa8bU2+1pZjSRpvNJ1Y=

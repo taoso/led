@@ -259,6 +259,12 @@ func load(proxy *led.Proxy) error {
 		proxy.SetZonePath(os.Getenv("ZONE_PATH"))
 	}
 
+	if db := os.Getenv("ZONE_REPO_DB"); db != "" {
+		proxy.ZoneRepo = store.NewZoneRepo(db)
+		proxy.SetKey(os.Getenv("HMAC_SIGN_KEY"))
+		proxy.SetZonePath(os.Getenv("ZONE_PATH"))
+	}
+
 	return nil
 }
 

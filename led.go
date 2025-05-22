@@ -41,6 +41,7 @@ type Proxy struct {
 
 	TokenRepo  *store.TokenRepo
 	TicketRepo store.TicketRepo
+	ZoneRepo   store.ZoneRepo
 
 	AltSvc string
 
