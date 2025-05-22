@@ -332,16 +332,16 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(req.URL.Path, "/+/zone") {
-			p.zone(w, req)
-			return
-		}
-
 		if f.Rewritten(w, req) {
 			return
 		}
 
 		f.fs.ServeHTTP(w, req)
+		return
+	}
+
+	if strings.HasPrefix(req.URL.Path, "/+/zone") {
+		p.zone(w, req)
 		return
 	}
 
