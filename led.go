@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/taoso/led/ecdsa"
@@ -23,13 +24,15 @@ import (
 	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/idna"
+	"golang.org/x/net/webdav"
 )
 
 // Proxy http proxy handler
 type Proxy struct {
 	sites map[string]*FileHandler
 	users map[string]string
-	zones map[string]Zone
+
+	davs *xsync.Map[string, webdav.Handler]
 
 	zPath string
 
@@ -94,24 +97,9 @@ func (p *Proxy) SetSites(sites map[string]string) {
 	p.sites = hs
 }
 
-func (p *Proxy) SetZone(zones map[string]string) {
-	zs := make(map[string]Zone, len(zones))
-	for domain, s := range zones {
-		p := strings.Split(s, ",")
-
-		zs[domain] = Zone{
-			Domain: domain,
-			Email:  p[0],
-			Owner:  p[1],
-			Desc:   p[2],
-			Date:   p[3],
-		}
-	}
-	p.zones = zs
-}
-
 func (p *Proxy) SetZonePath(path string) {
 	p.zPath = path
+	p.davs = xsync.NewMap[string, webdav.Handler]()
 }
 
 func (p *Proxy) SetKey(key string) {
@@ -123,6 +111,9 @@ func (p *Proxy) SetKey(key string) {
 }
 
 func (p *Proxy) MySite(name string) bool {
+	if strings.HasSuffix(name, "zz.ac") {
+		return true
+	}
 	_, ok := p.sites[name]
 	return ok
 }
@@ -180,7 +171,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	origin := req.Header.Get("Origin")
 	if u, err := url.Parse(origin); err == nil {
-		if _, ok := p.sites[p.host(u.Host)]; ok {
+		if p.MySite(p.host(u.Host)) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 	}
@@ -193,7 +184,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
-	if f := p.sites[p.host(req.Host)]; f != nil {
+	host := p.host(req.Host)
+	if f := p.sites[host]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
 			return
@@ -348,6 +340,39 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		}
 
 		f.fs.ServeHTTP(w, req)
+		return
+	}
+
+	if strings.HasSuffix(host, ".zz.ac") {
+		domain := strings.Replace(host, ".zz.ac", "", 1)
+
+		if req.Method != http.MethodGet && req.Method != http.MethodOptions {
+			username, password, ok := req.BasicAuth()
+			if username != "" {
+				req.URL.User = url.User(username)
+			}
+
+			z, err := p.ZoneRepo.Get(domain)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			if !ok || username != z.Email || password != z.WebKey {
+				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		fs, _ := p.davs.LoadOrCompute(domain, func() (webdav.Handler, bool) {
+			return webdav.Handler{
+				FileSystem: webdav.Dir(p.Root + "/" + host),
+				LockSystem: webdav.NewMemLS(),
+			}, false
+		})
+
+		fs.ServeHTTP(w, req)
 		return
 	}
 }

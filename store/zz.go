@@ -10,12 +10,13 @@ import (
 )
 
 type Zone struct {
-	ID    int       `db:"id"`
-	Name  string    `db:"name"`
-	Email string    `db:"email"`
-	Owner string    `db:"owner"`
-	Descr string    `db:"descr"`
-	Time  time.Time `db:"time"`
+	ID     int       `db:"id"`
+	Name   string    `db:"name"`
+	Email  string    `db:"email"`
+	Owner  string    `db:"owner"`
+	Descr  string    `db:"descr"`
+	Time   time.Time `db:"time"`
+	WebKey string    `db:"webkey"`
 }
 
 func (_ *Zone) KeyName() string   { return "id" }
