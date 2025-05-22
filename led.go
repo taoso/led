@@ -346,6 +346,11 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if strings.HasSuffix(host, ".zz.ac") {
+		if host == "whois.zz.ac" {
+			localRedirect(w, req, "https://whois.nic.zz.ac")
+			return
+		}
+
 		domain := strings.Replace(host, ".zz.ac", "", 1)
 		root := p.Root + "/" + host
 
