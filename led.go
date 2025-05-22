@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -345,8 +347,18 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 
 	if strings.HasSuffix(host, ".zz.ac") {
 		domain := strings.Replace(host, ".zz.ac", "", 1)
+		root := p.Root + "/" + host
 
-		if req.Method != http.MethodGet && req.Method != http.MethodOptions {
+		if req.Method == http.MethodGet || req.Method == http.MethodOptions {
+			if strings.HasSuffix(req.URL.Path, "/") {
+				indexPath := filepath.Join(root, req.URL.Path, "index.html")
+				if _, err := os.Stat(indexPath); err == nil {
+					fs := http.FileServer(http.Dir(root))
+					fs.ServeHTTP(w, req)
+					return
+				}
+			}
+		} else {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
 				req.URL.User = url.User(username)
@@ -367,7 +379,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 
 		fs, _ := p.davs.LoadOrCompute(domain, func() (webdav.Handler, bool) {
 			return webdav.Handler{
-				FileSystem: webdav.Dir(p.Root + "/" + host),
+				FileSystem: webdav.Dir(root),
 				LockSystem: webdav.NewMemLS(),
 			}, false
 		})
