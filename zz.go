@@ -2,6 +2,7 @@ package led
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/base64"
@@ -32,6 +33,9 @@ type Zone struct {
 func (p *Proxy) zone(w http.ResponseWriter, req *http.Request) {
 	a := req.FormValue("a")
 	switch a {
+	case "webdav":
+		p.zoneWebDAV(w, req)
+		return
 	case "link":
 		p.zoneLink(w, req)
 		return
@@ -132,6 +136,58 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (p *Proxy) zoneWebDAV(w http.ResponseWriter, req *http.Request) {
+	email := req.FormValue("e")
+	domain := req.FormValue("d")
+
+	z, err := p.ZoneRepo.Get(domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if z.Email != email {
+		http.Error(w, "invalid argument", http.StatusBadRequest)
+		return
+	}
+
+	root := p.Root + "/" + domain + ".zz.ac"
+	if err := os.Mkdir(root, 0755); err != nil && !os.IsExist(err) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	key := make([]byte, 32)
+	rand.Read(key)
+	z.WebKey = base64.URLEncoding.EncodeToString(key)
+
+	if err := p.ZoneRepo.Update(&z); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	content := "Your ZZ.AC WebDAV Details are:\n" +
+		"\n" +
+		"URL: " + "https://" + domain + ".zz.ac\n" +
+		"username: " + email + "\n" +
+		"password: " + z.WebKey + "\n"
+
+	m := enmime.Builder().
+		From("zz.ac", os.Getenv("SMTP_USER")).
+		To("", email).
+		Subject("ZZ.AC WebDAV Details").
+		Text([]byte(content))
+
+	ss := TLSSender{
+		Username: os.Getenv("SMTP_USER"),
+		Password: os.Getenv("SMTP_PASS"),
+		Hostaddr: os.Getenv("SMTP_HOST"),
+	}
+
+	if err := m.Send(ss); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+}
+
 func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
 	tmpl, err := template.ParseFS(htmls, "*.html")
 	if err != nil {
@@ -172,6 +228,7 @@ func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	z.Email = "nic@zz.ac"
+	z.WebKey = ""
 
 	json.NewEncoder(w).Encode(z)
 }

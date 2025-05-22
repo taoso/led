@@ -1,6 +1,6 @@
 module github.com/taoso/led
 
-go 1.23.0
+go 1.24
 
 toolchain go1.24.3
 
@@ -17,6 +17,7 @@ require (
 	github.com/jhillyerd/enmime v1.3.0
 	github.com/joho/godotenv v1.5.1
 	github.com/miekg/dns v1.1.62
+	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/quic-go/quic-go v0.52.0
 	github.com/smartwalle/alipay/v3 v3.2.23
 	github.com/stretchr/testify v1.9.0
