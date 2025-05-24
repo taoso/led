@@ -106,11 +106,15 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 	s := h.Sum(nil)
 	sign := base64.URLEncoding.EncodeToString(s)
 
-	link := fmt.Sprintf(
-		"https://%s%s?n=%s&t=%s&s=%s",
-		req.Host, req.URL.Path,
-		domain, ts, sign,
-	)
+	auth := fmt.Sprintf("?n=%s&t=%s&s=%s", domain, ts, sign)
+
+	var link string
+
+	if url := req.FormValue("url"); url != "" {
+		link = url + auth
+	} else {
+		link = "https://" + req.Host + req.URL.Path + auth
+	}
 
 	content := "Your ZZ.AC Zone Editor Link is:\n" +
 		"\n" +
