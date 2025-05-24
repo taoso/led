@@ -189,18 +189,23 @@ func (p *Proxy) zoneWebDAV(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
-	tmpl, err := template.ParseFS(htmls, "*.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	name := req.FormValue("n")
 
 	db := p.zPath + "/zz.ac/" + name + ".zone"
 
 	b, err := os.ReadFile(db)
 	if err != nil && !os.IsNotExist(err) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if req.URL.Query().Get("api") != "" {
+		w.Write(b)
+		return
+	}
+
+	tmpl, err := template.ParseFS(htmls, "*.html")
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -234,12 +239,6 @@ func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
-	tmpl, err := template.ParseFS(htmls, "*.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	name := req.FormValue("n")
 	zone := req.FormValue("zone")
 
@@ -260,6 +259,23 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 		if d.Error == nil {
 			d.Msg = "Zone updated."
 		}
+	}
+
+	if req.URL.Query().Get("api") != "" {
+		var err string
+		if d.Error != nil {
+			err = d.Error.Error()
+		}
+		json.NewEncoder(w).Encode(struct {
+			Err string `json:"err"`
+		}{err})
+		return
+	}
+
+	tmpl, err := template.ParseFS(htmls, "*.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	tmpl.ExecuteTemplate(w, "zone.html", d)
