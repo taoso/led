@@ -42,13 +42,16 @@ func (p *Proxy) zone(w http.ResponseWriter, req *http.Request) {
 	case "whois":
 		p.zoneWhois(w, req)
 		return
+	case "apply":
+		p.zoneApply(w, req)
+		return
 	}
 
 	n := req.URL.Query().Get("n")
 	t := req.URL.Query().Get("t")
 	s := req.URL.Query().Get("s")
 
-	s1, err := base64.URLEncoding.DecodeString(s)
+	s1, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -72,6 +75,15 @@ func (p *Proxy) zone(w http.ResponseWriter, req *http.Request) {
 	tt := time.Unix(int64(i), 0)
 	if time.Now().Sub(tt) > 1*time.Hour {
 		http.Error(w, "The link has expired", http.StatusBadRequest)
+		return
+	}
+
+	switch a {
+	case "v1":
+		p.zoneApplyVerifyEmail(w, req)
+		return
+	case "v2":
+		p.zoneApplyAuth(w, req)
 		return
 	}
 
@@ -104,7 +116,7 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 
 	h.Write([]byte(domain + "@" + ts))
 	s := h.Sum(nil)
-	sign := base64.URLEncoding.EncodeToString(s)
+	sign := base64.RawURLEncoding.EncodeToString(s)
 
 	auth := fmt.Sprintf("?n=%s&t=%s&s=%s", domain, ts, sign)
 
@@ -116,7 +128,8 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 		link = "https://" + req.Host + req.URL.Path + auth
 	}
 
-	content := "Your ZZ.AC Zone Editor Link is:\n" +
+	content := "Hi, " + z.Owner + "\n\n" +
+		"Your ZZ.AC Zone Editor Link is:\n" +
 		"\n" +
 		link + "\n" +
 		"\n" +
@@ -162,17 +175,18 @@ func (p *Proxy) zoneWebDAV(w http.ResponseWriter, req *http.Request) {
 
 	key := make([]byte, 32)
 	rand.Read(key)
-	z.WebKey = base64.URLEncoding.EncodeToString(key)
+	z.WebKey = base64.RawURLEncoding.EncodeToString(key)
 
 	if err := p.ZoneRepo.Update(&z); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	content := "Your ZZ.AC WebDAV Details are:\n" +
+	content := "Hi, " + z.Owner + "\n\n" +
+		"Your ZZ.AC WebDAV Details are:\n" +
 		"\n" +
-		"URL: " + "https://" + domain + ".zz.ac\n" +
-		"username: " + email + "\n" +
-		"password: " + z.WebKey + "\n"
+		"- URL: " + "https://" + domain + ".zz.ac\n" +
+		"- Username: " + email + "\n" +
+		"- Password: " + z.WebKey + "\n"
 
 	m := enmime.Builder().
 		From("zz.ac", os.Getenv("SMTP_USER")).
@@ -236,7 +250,7 @@ func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("content-type", "application/json")
 
-	z.Email = "nic@zz.ac"
+	z.Email = z.Name + "@zz.ac"
 	z.WebKey = ""
 
 	json.NewEncoder(w).Encode(z)
@@ -283,6 +297,306 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 	}
 
 	tmpl.ExecuteTemplate(w, "zone.html", d)
+}
+
+func (p *Proxy) zoneApply(w http.ResponseWriter, req *http.Request) {
+	var d struct {
+		Domain  string `json:"domain"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Meaning string `json:"meaning"`
+		Plan    string `json:"plan"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&d); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	z, err := p.ZoneRepo.Get(d.Domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if z.Name != "" {
+		http.Error(w, "domain is unaviable", http.StatusBadRequest)
+		return
+	}
+
+	if len(d.Domain) < 4 {
+		http.Error(w, "domain is invalid", http.StatusBadRequest)
+		return
+	}
+
+	if len(d.Name) < 3 {
+		http.Error(w, "name is invalid", http.StatusBadRequest)
+		return
+	}
+
+	if len(d.Meaning) < 10 {
+		http.Error(w, "meaning is invalid", http.StatusBadRequest)
+		return
+	}
+
+	if len(d.Plan) < 10 {
+		http.Error(w, "plan is invalid", http.StatusBadRequest)
+		return
+	}
+
+	k := d.Domain
+
+	path := p.zPath + "/tmp/" + k + ".json"
+
+	if _, err = os.Stat(path); err == nil {
+		http.Error(w, "domain is unaviable", http.StatusBadRequest)
+		return
+	}
+
+	ds, _ := json.MarshalIndent(d, "", "  ")
+	if err := os.WriteFile(path, ds, 0666); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h := hmac.New(sha256.New, p.signKey)
+
+	n := time.Now()
+	t := n.Unix()
+	ts := strconv.Itoa(int(t))
+
+	h.Write([]byte(k + "@" + ts))
+	s := h.Sum(nil)
+	sign := base64.RawURLEncoding.EncodeToString(s)
+
+	auth := fmt.Sprintf("?n=%s&t=%s&s=%s&a=v1", k, ts, sign)
+
+	link := "https://" + req.Host + req.URL.Path + auth
+
+	content := "Hi, " + d.Name + "\n\n" +
+		"You are applying the domain of " + d.Domain + ".zz.ac\n\n" +
+		"Please click the following link to very your ZZ.AC apply Email.\n" +
+		"\n" +
+		link + "\n" +
+		"\n" +
+		"This link will expire after one hour.\n" +
+		"\n" +
+		"If you have not applyed the zz.ac domain name, please ignore the Email.\n" +
+		"\n" +
+		"\n" +
+		"zz.nic"
+
+	m := enmime.Builder().
+		From("zz.ac", os.Getenv("SMTP_USER")).
+		To(d.Name, d.Email).
+		ReplyTo("zz.nic", "nic@zz.ac").
+		Subject("Verify your ZZ.AC Email").
+		Text([]byte(content))
+
+	ss := TLSSender{
+		Username: os.Getenv("SMTP_USER"),
+		Password: os.Getenv("SMTP_PASS"),
+		Hostaddr: os.Getenv("SMTP_HOST"),
+	}
+
+	if err := m.Send(ss); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+	}
+}
+
+func (p *Proxy) zoneApplyVerifyEmail(w http.ResponseWriter, req *http.Request) {
+	k := req.URL.Query().Get("n")
+	path := p.zPath + "/tmp/" + k + ".json"
+
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		http.Error(w, "link expired or verifed", http.StatusBadRequest)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var d struct {
+		Domain  string `json:"domain"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Meaning string `json:"meaning"`
+		Plan    string `json:"plan"`
+	}
+
+	if err := json.Unmarshal(b, &d); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	z, err := p.ZoneRepo.Get(d.Domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if z.Name != "" {
+		http.Error(w, "domain is unaviable", http.StatusBadRequest)
+		return
+	}
+
+	h := hmac.New(sha256.New, p.signKey)
+
+	n := time.Now().AddDate(0, 0, 7)
+	t := n.Unix()
+	ts := strconv.Itoa(int(t))
+
+	h.Write([]byte(k + "@" + ts))
+	s := h.Sum(nil)
+	sign := base64.RawURLEncoding.EncodeToString(s)
+
+	auth := fmt.Sprintf("?n=%s&t=%s&s=%s&a=v2", k, ts, sign)
+
+	link := "https://" + req.Host + req.URL.Path + auth
+
+	content := string(b) +
+		"\n\n" +
+		link + "\n\n" +
+		"zz.nic"
+
+	m := enmime.Builder().
+		From("zz.ac", os.Getenv("SMTP_USER")).
+		To("zz.nic", "nic@zz.ac").
+		ReplyTo(d.Name, d.Email).
+		Subject("New ZZ.AC application.").
+		Text([]byte(content))
+
+	ss := TLSSender{
+		Username: os.Getenv("SMTP_USER"),
+		Password: os.Getenv("SMTP_PASS"),
+		Hostaddr: os.Getenv("SMTP_HOST"),
+	}
+
+	if err := m.Send(ss); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+	}
+
+	os.Rename(path, path+"_")
+
+	w.Write([]byte("Hi, " + d.Name + "\n\n" +
+		"You Email has been verified.\n\n" +
+		"We will review your application as soon as possible.\n" +
+		"Further updates will be sent to your Email.\n\n" +
+		"zz.nic"))
+}
+
+func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
+	k := req.URL.Query().Get("n")
+	path := p.zPath + "/tmp/" + k + ".json_"
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var d struct {
+		Domain  string `json:"domain"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Meaning string `json:"meaning"`
+		Plan    string `json:"plan"`
+	}
+
+	if err := json.Unmarshal(b, &d); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	z, err := p.ZoneRepo.Get(d.Domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if z.Name != "" {
+		http.Error(w, "domain is unaviable", http.StatusBadRequest)
+		return
+	}
+
+	z.Name = d.Domain
+	z.Email = d.Email
+	z.Owner = d.Name
+	z.Descr = d.Meaning
+	z.Time = time.Now().Truncate(time.Second)
+
+	key := make([]byte, 32)
+	rand.Read(key)
+	z.WebKey = base64.RawURLEncoding.EncodeToString(key)
+
+	if err := p.ZoneRepo.New(&z); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	os.Remove(path)
+
+	webDavRoot := p.Root + "/" + z.Name + ".zz.ac"
+	if err = os.Mkdir(webDavRoot, 0755); err != nil {
+		fmt.Println(err, webDavRoot)
+	}
+	err = os.WriteFile(webDavRoot+"/index.html", []byte("Hello, World!\n"), 0644)
+	if err != nil {
+		fmt.Println(err, webDavRoot+"/index.html")
+	}
+
+	zone := []byte("; change this record may affect your WebDAV space\n@ CNAME nic.zz.ac.\n")
+	err = os.WriteFile(p.zPath+"/zz.ac/"+d.Domain+".zone", zone, 0644)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	db, err := os.OpenFile(p.zPath+"/db.zz.ac", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	_, err = db.WriteString("$INCLUDE zz.ac/" + d.Domain + ".zone\t\t" + d.Domain + "\n")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	content := "Hi " + z.Owner + "\n\n" +
+		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
+		"The DNS records can be managed via https://nic.zz.ac/#zone\n\n" +
+		"Your ZZ.AC WebDAV Details are:\n\n" +
+		"- URL: " + "https://" + z.Name + ".zz.ac\n" +
+		"- Username: " + z.Email + "\n" +
+		"- Password: " + z.WebKey + "\n\n" +
+		"The WebDAV password can be reset at https://nic.zz.ac/#webdav\n\n" +
+		"More discussion can be found in Telegram Group https://t.me/zz_nic\n\n" +
+		"zz.nic"
+
+	m := enmime.Builder().
+		From("zz.ac", os.Getenv("SMTP_USER")).
+		To(z.Owner, z.Email).
+		ReplyTo("", "nic@zz.ac").
+		Subject(z.Name + ".zz.ac domain created").
+		Text([]byte(content))
+
+	ss := TLSSender{
+		Username: os.Getenv("SMTP_USER"),
+		Password: os.Getenv("SMTP_PASS"),
+		Hostaddr: os.Getenv("SMTP_HOST"),
+	}
+
+	if err := m.Send(ss); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+
+	e := json.NewEncoder(w)
+	e.SetIndent("", "  ")
+	e.Encode(z)
 }
 
 func parseZone(origin, zone string) error {
