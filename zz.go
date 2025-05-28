@@ -610,6 +610,9 @@ func parseZone(origin, zone string) error {
 		if h.Ttl < 60 {
 			return fmt.Errorf("TTL must be longer than %ds.", 60)
 		}
+		if strings.Contains(h.Name, "*") {
+			return fmt.Errorf("Wildcard name %s are not supported.", h.Name)
+		}
 		if !strings.HasSuffix(h.Name, origin) {
 			return fmt.Errorf("Subdomain %s does not belongs to %s.", h.Name, origin)
 		}
