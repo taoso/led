@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/go-kiss/sqlx"
@@ -65,6 +66,7 @@ func (r ZoneRepo) Update(z *Zone) error {
 }
 
 func (r ZoneRepo) Get(name string) (z Zone, err error) {
+	name = strings.ToLower(name)
 	err = r.db.Get(
 		&z,
 		"select * from "+(*Zone).TableName(nil)+" where name = ?",
