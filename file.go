@@ -46,6 +46,11 @@ func NewHandler(root string, name string) *FileHandler {
 }
 
 func (h *FileHandler) Rewritten(w http.ResponseWriter, req *http.Request) bool {
+	// Google AdSense
+	if strings.HasPrefix(req.URL.Path, "/ads.txt") {
+		return false
+	}
+
 	b, err := os.ReadFile(path.Join(h.Root, "rewrite.txt"))
 
 	if os.IsNotExist(err) {
