@@ -363,6 +363,30 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 					return
 				}
 			}
+			if strings.HasSuffix(req.URL.Path, ".md.html") {
+				p := strings.TrimSuffix(req.URL.Path, ".html")
+				p = filepath.Join(root, p)
+				md, err := os.ReadFile(p)
+				if os.IsNotExist(err) {
+					http.Error(w, err.Error(), http.StatusNotFound)
+					return
+				} else if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				w.Header().Set("content-type", "text/html; charset=utf-8")
+				w.Write([]byte("<pre>"))
+				w.Write(md)
+				w.Write([]byte("</pre>"))
+
+				tail, err := os.Open(filepath.Join(root, "__markdown_tail.html"))
+				if err == nil {
+					io.Copy(w, tail)
+				}
+
+				return
+			}
 		} else if req.Method != http.MethodOptions {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
