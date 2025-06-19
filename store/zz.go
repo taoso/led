@@ -10,6 +10,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type Status int
+
+const (
+	StatusOK Status = iota
+	StatusDeleted
+)
+
 type Zone struct {
 	ID     int       `db:"id"`
 	Name   string    `db:"name"`
@@ -18,6 +25,7 @@ type Zone struct {
 	Descr  string    `db:"descr"`
 	Time   time.Time `db:"time"`
 	WebKey string    `db:"webkey"`
+	Status Status    `db:"status"`
 }
 
 func (_ *Zone) KeyName() string   { return "id" }
@@ -29,9 +37,12 @@ func (t *Zone) Schema() string {
         email TEXT,
         owner TEXT,
         descr TEXT,
-        time DATETIME
+        time DATETIME,
+        webkey TEXT,
+        status integer
 );
-        CREATE INDEX IF NOT EXISTS name ON ` + t.TableName() + `(name);`
+        CREATE INDEX IF NOT EXISTS name ON ` + t.TableName() + `(name);
+        CREATE INDEX IF NOT EXISTS email ON ` + t.TableName() + `(email);`
 }
 
 type ZoneRepo struct {
@@ -69,12 +80,33 @@ func (r ZoneRepo) Get(name string) (z Zone, err error) {
 	name = strings.ToLower(name)
 	err = r.db.Get(
 		&z,
-		"select * from "+(*Zone).TableName(nil)+" where name = ?",
+		"select * from "+(*Zone).TableName(nil)+" where name = ? and status = ?",
 		name,
+		StatusOK,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 	}
+	return
+}
+
+func (r ZoneRepo) GetAll(name string) (zs []Zone, err error) {
+	name = strings.ToLower(name)
+	err = r.db.Select(
+		&zs,
+		"select * from "+(*Zone).TableName(nil)+" where name = ? order by id desc",
+		name,
+	)
+	return
+}
+
+func (r ZoneRepo) ListByEmail(email string) (zs []Zone, err error) {
+	email = strings.ToLower(email)
+	err = r.db.Select(
+		&zs,
+		"select * from "+(*Zone).TableName(nil)+" where email = ? order by id desc",
+		email,
+	)
 	return
 }
 

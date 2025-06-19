@@ -313,6 +313,12 @@ func (p *Proxy) zoneApply(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	d.Domain = strings.ToLower(strings.TrimSpace(strings.ToValidUTF8(d.Domain, "")))
+	d.Email = strings.ToLower(strings.TrimSpace(strings.ToValidUTF8(d.Email, "")))
+	d.Name = strings.TrimSpace(strings.ToValidUTF8(d.Name, ""))
+	d.Meaning = strings.TrimSpace(strings.ToValidUTF8(d.Meaning, ""))
+	d.Plan = strings.TrimSpace(strings.ToValidUTF8(d.Plan, ""))
+
 	z, err := p.ZoneRepo.Get(d.Domain)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -386,9 +392,8 @@ func (p *Proxy) zoneApply(w http.ResponseWriter, req *http.Request) {
 		"zz.nic"
 
 	m := enmime.Builder().
-		From("zz.ac", os.Getenv("SMTP_USER")).
+		From("", os.Getenv("SMTP_USER")).
 		To(d.Name, d.Email).
-		ReplyTo("zz.nic", "nic@zz.ac").
 		Subject("Verify your ZZ.AC Email").
 		Text([]byte(content))
 
@@ -454,14 +459,29 @@ func (p *Proxy) zoneApplyVerifyEmail(w http.ResponseWriter, req *http.Request) {
 
 	link := "https://" + req.Host + req.URL.Path + auth
 
-	content := string(b) +
-		"\n\n" +
-		link + "\n\n" +
+	zs, err := p.ZoneRepo.ListByEmail(d.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	content := string(b) + "\n\n"
+
+	if len(zs) > 0 {
+		b, err := json.MarshalIndent(zs, "", "  ")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		content += string(b) + "\n\n"
+	}
+
+	content += link + "\n\n" +
 		"zz.nic"
 
 	m := enmime.Builder().
-		From("zz.ac", os.Getenv("SMTP_USER")).
-		To("zz.nic", "nic@zz.ac").
+		From("", os.Getenv("SMTP_USER")).
+		To("", "nic@zz.ac").
 		ReplyTo(d.Name, d.Email).
 		Subject("New ZZ.AC application.").
 		Text([]byte(content))
@@ -577,9 +597,8 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 		"zz.nic"
 
 	m := enmime.Builder().
-		From("zz.ac", os.Getenv("SMTP_USER")).
+		From("", os.Getenv("SMTP_USER")).
 		To(z.Owner, z.Email).
-		ReplyTo("", "nic@zz.ac").
 		Subject(z.Name + ".zz.ac domain created").
 		Text([]byte(content))
 
