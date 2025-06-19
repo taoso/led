@@ -556,17 +556,7 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 
 	os.Remove(path)
 
-	webDavRoot := p.Root + "/" + z.Name + ".zz.ac"
-	if err = os.Mkdir(webDavRoot, 0755); err != nil {
-		fmt.Println(err, webDavRoot)
-	}
-	err = os.WriteFile(webDavRoot+"/index.html", []byte("Hello, World!\n"), 0644)
-	if err != nil {
-		fmt.Println(err, webDavRoot+"/index.html")
-	}
-
-	zone := []byte("; change this record may affect your WebDAV space\n@ CNAME nic.zz.ac.\n")
-	err = os.WriteFile(p.zPath+"/zz.ac/"+d.Domain+".zone", zone, 0644)
+	err = os.WriteFile(p.zPath+"/zz.ac/"+d.Domain+".zone", []byte(""), 0644)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -588,11 +578,9 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	content := "Hi " + z.Owner + "\n\n" +
 		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
 		"The DNS records can be managed via https://nic.zz.ac/#zone\n\n" +
-		"Your ZZ.AC WebDAV Details are:\n\n" +
-		"- URL: " + "https://" + z.Name + ".zz.ac\n" +
-		"- Username: " + z.Email + "\n" +
-		"- Password: " + z.WebKey + "\n\n" +
-		"The WebDAV password can be reset at https://nic.zz.ac/#webdav\n\n" +
+		"Your WebDAV zone can be managed via https://nic.zz.ac/#webdav\n\n" +
+		"You need to publish your website on https://" + z.Name + ".zz.ac within one month.\n" +
+		"Othewise, this domain will be reclaimed.\n\n" +
 		"More discussion can be found in Telegram Group https://t.me/zz_nic\n\n" +
 		"zz.nic"
 
