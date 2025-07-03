@@ -632,6 +632,9 @@ func parseZone(origin, zone string) error {
 		if h.Rrtype == dns.TypeSOA {
 			return fmt.Errorf("You must not change SOA record.")
 		}
+		if h.Rrtype == dns.TypeRRSIG || h.Rrtype == dns.TypeDS || h.Rrtype == dns.TypeDNSKEY {
+			return fmt.Errorf("DNSSEC records will be generated automatically.")
+		}
 	}
 	return zp.Err()
 }
