@@ -612,6 +612,8 @@ func parseZone(origin, zone string) error {
 
 	zp.SetDefaultTTL(60)
 
+	rrs := map[string]bool{}
+	cnames := map[string]bool{}
 	for r, ok := zp.Next(); ok; r, ok = zp.Next() {
 		h := r.Header()
 		if h.Ttl < 60 {
@@ -635,6 +637,17 @@ func parseZone(origin, zone string) error {
 		if h.Rrtype == dns.TypeRRSIG || h.Rrtype == dns.TypeDS || h.Rrtype == dns.TypeDNSKEY {
 			return fmt.Errorf("DNSSEC records will be generated automatically.")
 		}
+
+		if h.Rrtype == dns.TypeCNAME {
+			if rrs[h.Name] {
+				return fmt.Errorf("CNAME cannot co-exit with other RR.")
+			}
+			cnames[h.Name] = true
+		} else if cnames[h.Name] {
+			return fmt.Errorf("CNAME cannot co-exit with other RR.")
+		}
+
+		rrs[h.Name] = true
 	}
 	return zp.Err()
 }
