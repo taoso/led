@@ -114,7 +114,11 @@ func (p *Proxy) SetKey(key string) {
 
 func (p *Proxy) MySite(name string) bool {
 	if strings.HasSuffix(name, "zz.ac") {
-		return true
+		name := strings.TrimSuffix(name, ".zz.ac")
+		z, _ := p.ZoneRepo.Get(name)
+		if z.ID > 0 {
+			return true
+		}
 	}
 	_, ok := p.sites[name]
 	return ok
