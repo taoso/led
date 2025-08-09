@@ -259,6 +259,7 @@ func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 	name := req.FormValue("n")
 	zone := req.FormValue("zone")
+	token := req.FormValue("desec-token")
 
 	d := struct {
 		Zone   string
@@ -270,7 +271,12 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 		Domain: name + ".zz.ac",
 	}
 
-	d.Error = parseZone(name+".zz.ac.", zone)
+	if token != "" {
+		zone, d.Error = deSecZone(name+".zz.ac", token)
+	} else {
+		d.Error = parseZone(name+".zz.ac.", zone)
+	}
+
 	if d.Error == nil {
 		db := p.zPath + "/zz.ac/" + name + ".zone"
 		d.Error = os.WriteFile(db, []byte(zone), os.FileMode(0644))
