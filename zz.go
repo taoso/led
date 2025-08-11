@@ -584,8 +584,7 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	content := "Hi " + z.Owner + "\n\n" +
 		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
 		"The DNS records can be managed via https://nic.zz.ac/#zone\n\n" +
-		"Your WebDAV zone can be managed via https://nic.zz.ac/#webdav\n\n" +
-		"You need to publish your website on https://" + z.Name + ".zz.ac within one month.\n" +
+		"You need to publish your website on https://" + z.Name + ".zz.ac within 10 days.\n" +
 		"Othewise, this domain will be reclaimed.\n\n" +
 		"More discussion can be found in Telegram Group https://t.me/zz_nic\n\n" +
 		"zz.nic"
