@@ -2,10 +2,6 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>$site_title$</title>
   <id>$site_url$/</id>
-  <author>
-    <name>$author_name$</name>
-    <email>$author_email$</email>
-  </author>
   <link href="$site_url$"/>
   <link href="$site_url$/feed.xml" rel="self"/>
   <updated>$all_updated$</updated>
