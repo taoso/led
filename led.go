@@ -316,22 +316,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if strings.HasSuffix(req.URL.Path, ".md") {
-				var e string
-				switch req.Method {
-				case "DELETE", "MOVE":
-					e = "-" + f.Name + req.URL.Path[len("/+/dav"):]
-				case "COPY", "PUT":
-					e = "+" + f.Name
-				}
-
-				if e != "" {
-					select {
-					case p.DavEvs <- e:
-					default:
-					}
-				}
-			}
+			p.SendDavEvent(req, host)
 			f.dav.ServeHTTP(w, req)
 			return
 		}
@@ -393,8 +378,33 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			}, false
 		})
 
+		p.SendDavEvent(req, host)
+
 		fs.ServeHTTP(w, req)
 		return
+	}
+}
+
+func (p *Proxy) SendDavEvent(req *http.Request, host string) {
+	if !strings.HasSuffix(req.URL.Path, ".md") {
+		return
+	}
+
+	var e string
+	switch req.Method {
+	case "DELETE", "MOVE":
+		e = "-" + host + strings.TrimLeft(req.URL.Path, "/+/dav")
+	case "COPY", "PUT":
+		e = "+" + host
+	}
+
+	if e == "" {
+		return
+	}
+
+	select {
+	case p.DavEvs <- e:
+	default:
 	}
 }
 
