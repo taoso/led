@@ -558,10 +558,6 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	z.Descr = d.Meaning
 	z.Time = time.Now().Truncate(time.Second)
 
-	key := make([]byte, 32)
-	rand.Read(key)
-	z.WebKey = base64.RawURLEncoding.EncodeToString(key)
-
 	if err := p.ZoneRepo.New(&z); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

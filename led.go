@@ -379,7 +379,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 
-			if !ok || username != z.Email || password != z.WebKey {
+			if !ok || username != z.Email || password == "" || password != z.WebKey {
 				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
