@@ -470,6 +470,13 @@ func (p *Proxy) zoneApplyVerifyEmail(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	zs2, err := p.ZoneRepo.GetAll(d.Domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	zs = append(zs, zs2...)
 
 	content := string(b) + "\n\n"
 
