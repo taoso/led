@@ -37,10 +37,16 @@ if [[ "$(tail -n 1 $tmp)" == "articles:" ]]; then
 	continue
 fi
 
+tpl=index.tpl
+
+if [[ ! -f "$tpl" ]]; then
+	tpl=$ROOT_DIR/$tpl
+fi
+
 index=$dir/index.htm
 
 pandoc -s -p -f markdown --wrap=none \
-	--template index.tpl \
+	--template $tpl \
 	--metadata-file=$tmp \
 	--lua-filter $LUA_FILTER \
 	-o $index /dev/null

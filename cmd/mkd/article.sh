@@ -11,10 +11,16 @@ trap cleanup EXIT INT TERM
 echo title: $(basename $1 .md) >> $meta_file
 echo date: $(stat -c "%w" $1|cut -d' ' -f1) >> $meta_file
 
+tpl=article.tpl
+
+if [[ ! -f "$tpl" ]]; then
+	tpl=$ROOT_DIR/$tpl
+fi
+
 pandoc -s -p --wrap=none \
 	--toc \
 	--mathml \
-	--template article.tpl \
+	--template $tpl \
 	--highlight-style=pygments \
 	--lua-filter $LUA_FILTER \
 	--metadata-file=$meta_file \

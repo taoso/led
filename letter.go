@@ -11,14 +11,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func (h *FileHandler) Comment(w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) Comment(host string, w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	envs, err := godotenv.Read(h.Root + "/env")
+	envs, err := godotenv.Read(p.Root + "/" + host + "/env")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))

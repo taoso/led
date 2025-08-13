@@ -3,7 +3,7 @@
 trap exit SIGINT SIGTERM
 
 while true; do
-	curl -s -K ~/.curl-dav-auth "$davhost/+/dav-events?d=60s" | sort | uniq | \
+	curl -s -K ~/.curl-dav-auth "$davhost/+/dav-events?d=60s" | \
 		while read ev; do
 			if [[ $ev == -* ]]; then
 				# 删除 MD 清理对应生成的文件

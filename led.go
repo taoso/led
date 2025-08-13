@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -233,7 +232,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
-			f.Comment(w, req)
+			p.Comment(host, w, req)
 			return
 		}
 
@@ -298,6 +297,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				}
 			resp:
 				for _, e := range evs {
+					fmt.Println("my", e)
 					w.Write([]byte(e + "\n"))
 				}
 			case <-t.C:
@@ -316,23 +316,8 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if strings.HasSuffix(req.URL.Path, ".md") {
-				var e string
-				switch req.Method {
-				case "DELETE", "MOVE":
-					e = "-" + f.Name + req.URL.Path[len("/+/dav"):]
-				case "COPY", "PUT":
-					e = "+" + f.Name
-				}
-
-				if e != "" {
-					select {
-					case p.DavEvs <- e:
-					default:
-					}
-				}
-			}
 			f.dav.ServeHTTP(w, req)
+			p.SendDavEvent(req, host)
 			return
 		}
 
@@ -350,8 +335,8 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if strings.HasSuffix(host, ".zz.ac") {
-		if host == "whois.zz.ac" {
-			localRedirect(w, req, "https://whois.nic.zz.ac")
+		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
+			p.Comment(host, w, req)
 			return
 		}
 
@@ -359,14 +344,9 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		root := p.Root + "/" + host
 
 		if req.Method == http.MethodGet {
-			if strings.HasSuffix(req.URL.Path, "/") {
-				indexPath := filepath.Join(root, req.URL.Path, "index.html")
-				if _, err := os.Stat(indexPath); err == nil {
-					fs := http.FileServer(http.Dir(root))
-					fs.ServeHTTP(w, req)
-					return
-				}
-			}
+			fs := http.FileServer(leDir{http.Dir(root)})
+			fs.ServeHTTP(w, req)
+			return
 		} else if req.Method != http.MethodOptions {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
@@ -388,13 +368,37 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 
 		fs, _ := p.davs.LoadOrCompute(domain, func() (webdav.Handler, bool) {
 			return webdav.Handler{
-				FileSystem: webdav.Dir(root),
+				FileSystem: PickDir{Dir: webdav.Dir(root)},
 				LockSystem: webdav.NewMemLS(),
 			}, false
 		})
 
 		fs.ServeHTTP(w, req)
+		p.SendDavEvent(req, host)
 		return
+	}
+}
+
+func (p *Proxy) SendDavEvent(req *http.Request, host string) {
+	if !strings.HasSuffix(req.URL.Path, ".md") {
+		return
+	}
+
+	var e string
+	switch req.Method {
+	case "DELETE", "MOVE":
+		e = "-" + host + "/" + strings.TrimLeft(req.URL.Path, "/+/dav/")
+	case "COPY", "PUT":
+		e = "+" + host
+	}
+
+	if e == "" {
+		return
+	}
+
+	select {
+	case p.DavEvs <- e:
+	default:
 	}
 }
 

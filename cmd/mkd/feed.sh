@@ -2,6 +2,9 @@
 
 # 生成 atom 订阅文件
 # 需要在 index.sh 生成 index.yml 之后运行
+if [[ ! -f $1/index.yml ]]; then
+	exit 0
+fi
 
 updated=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 

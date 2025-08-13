@@ -4,9 +4,11 @@ set -e
 
 cd ~/sync/$1/
 
+export site_title=$1
+
 # https://stackoverflow.com/a/50673471
 set -o allexport
-source ./env
+[ -f ./env ] && source ./env
 set +o allexport
 
 export site_url=https://$1
