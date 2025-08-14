@@ -346,11 +346,20 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 
 		if req.Method == http.MethodGet {
 			if strings.HasSuffix(req.URL.Path, "/") {
-				indexPath := filepath.Join(root, req.URL.Path, "index.html")
-				if _, err := os.Stat(indexPath); err == nil {
+				for _, index := range []string{"index.html", "index.htm"} {
+					indexPath := filepath.Join(root, req.URL.Path, index)
+					if _, err := os.Stat(indexPath); err == nil {
+						fs := http.FileServer(http.Dir(root))
+						fs.ServeHTTP(w, req)
+						return
+					}
+				}
+			} else if strings.HasPrefix(req.URL.Path, ".html") {
+				htm := strings.TrimRight(req.URL.Path, "l")
+				if _, err := os.Stat(filepath.Join(root, htm)); err == nil {
+					req.URL.Path = htm
 					fs := http.FileServer(http.Dir(root))
 					fs.ServeHTTP(w, req)
-					return
 				}
 			}
 		} else if req.Method != http.MethodOptions {
