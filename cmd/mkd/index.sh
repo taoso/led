@@ -37,6 +37,12 @@ if [[ "$(tail -n 1 $tmp)" == "articles:" ]]; then
 	continue
 fi
 
+tpl=index.tpl
+
+if [[ ! -f "$tpl" ]]; then
+	tpl=$ROOT_DIR/$tpl
+fi
+
 index=$dir/index.htm
 
 pandoc -s -p -f markdown --wrap=none \
