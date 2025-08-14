@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -316,8 +317,8 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			p.SendDavEvent(req, host)
 			f.dav.ServeHTTP(w, req)
+			p.SendDavEvent(req, host)
 			return
 		}
 
@@ -378,9 +379,8 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			}, false
 		})
 
-		p.SendDavEvent(req, host)
-
 		fs.ServeHTTP(w, req)
+		p.SendDavEvent(req, host)
 		return
 	}
 }
@@ -401,6 +401,8 @@ func (p *Proxy) SendDavEvent(req *http.Request, host string) {
 	if e == "" {
 		return
 	}
+
+	fmt.Println("dav event", e)
 
 	select {
 	case p.DavEvs <- e:
