@@ -393,7 +393,7 @@ func (p *Proxy) SendDavEvent(req *http.Request, host string) {
 	var e string
 	switch req.Method {
 	case "DELETE", "MOVE":
-		e = "-" + host + strings.TrimLeft(req.URL.Path, "/+/dav")
+		e = "-" + host + "/" + strings.TrimLeft(req.URL.Path, "/+/dav/")
 	case "COPY", "PUT":
 		e = "+" + host
 	}
