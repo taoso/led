@@ -20,7 +20,7 @@ fi
 pandoc -s -p --wrap=none \
 	--toc \
 	--mathml \
-	--template article.tpl \
+	--template $tpl \
 	--highlight-style=pygments \
 	--lua-filter $LUA_FILTER \
 	--metadata-file=$meta_file \

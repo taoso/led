@@ -7,7 +7,7 @@ PWD := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 export ROOT_DIR = $(PWD)
 export LUA_FILTER = $(PWD)/desc.lua
 
-%.yml: %.md ./meta.tpl
+%.yml: %.md
 	$(PWD)/meta.sh $< > $@
 
 %.htm: %.md

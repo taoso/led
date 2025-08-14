@@ -46,7 +46,7 @@ fi
 index=$dir/index.htm
 
 pandoc -s -p -f markdown --wrap=none \
-	--template index.tpl \
+	--template $tpl \
 	--metadata-file=$tmp \
 	--lua-filter $LUA_FILTER \
 	-o $index /dev/null
