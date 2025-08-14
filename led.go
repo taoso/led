@@ -10,8 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -345,23 +343,9 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		root := p.Root + "/" + host
 
 		if req.Method == http.MethodGet {
-			if strings.HasSuffix(req.URL.Path, "/") {
-				for _, index := range []string{"index.html", "index.htm"} {
-					indexPath := filepath.Join(root, req.URL.Path, index)
-					if _, err := os.Stat(indexPath); err == nil {
-						fs := http.FileServer(http.Dir(root))
-						fs.ServeHTTP(w, req)
-						return
-					}
-				}
-			} else if strings.HasPrefix(req.URL.Path, ".html") {
-				htm := strings.TrimRight(req.URL.Path, "l")
-				if _, err := os.Stat(filepath.Join(root, htm)); err == nil {
-					req.URL.Path = htm
-					fs := http.FileServer(http.Dir(root))
-					fs.ServeHTTP(w, req)
-				}
-			}
+			fs := http.FileServer(leDir{http.Dir(root)})
+			fs.ServeHTTP(w, req)
+			return
 		} else if req.Method != http.MethodOptions {
 			username, password, ok := req.BasicAuth()
 			if username != "" {
@@ -383,7 +367,7 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 
 		fs, _ := p.davs.LoadOrCompute(domain, func() (webdav.Handler, bool) {
 			return webdav.Handler{
-				FileSystem: webdav.Dir(root),
+				FileSystem: PickDir{Dir: webdav.Dir(root)},
 				LockSystem: webdav.NewMemLS(),
 			}, false
 		})
