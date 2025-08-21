@@ -19,6 +19,7 @@ import (
 
 	"github.com/CAFxX/httpcompression"
 	"github.com/gorilla/handlers"
+	"github.com/pires/go-proxyproto"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
 	"github.com/taoso/led/pay"
@@ -191,6 +192,26 @@ func main() {
 	s := http.Server{
 		Handler:     h,
 		IdleTimeout: 30 * time.Second,
+	}
+
+	if sk := os.Getenv("SOCK_PATH"); sk != "" {
+		if err := os.Remove(sk); err != nil && !os.IsNotExist(err) {
+			log.Fatal("Error removing old socket", sk, err)
+		}
+
+		ln, err := net.Listen("unix", sk)
+		if err != nil {
+			log.Fatal("Error listening on Unix socket", sk, err)
+		}
+
+		if err := os.Chmod(sk, os.FileMode(0666)); err != nil {
+			log.Fatal("Error changing mode on Unix socket", sk, err)
+		}
+
+		pln := &proxyproto.Listener{Listener: ln}
+		lnTLS := tls.NewListener(pln, tlsCfg)
+		defer pln.Close()
+		go s.Serve(lnTLS)
 	}
 
 	s.Serve(lnTLS)
