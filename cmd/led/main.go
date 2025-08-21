@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -92,9 +93,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if lnH1 == nil && lnH2 == nil && lnH3 == nil {
-		panic("No listen port specified")
-	}
 
 	proxy := &led.Proxy{
 		DavEvs: make(chan string, 1024),
@@ -140,10 +138,10 @@ func main() {
 
 	h = ch(h)
 
-	// http only
-	if lnH2 == nil && lnH3 == nil {
-		http.Serve(lnH1, h)
-		return
+	wg := sync.WaitGroup{}
+
+	if lnH1 != nil {
+		wg.Go(func() { http.Serve(lnH1, h) })
 	}
 
 	// http2 or http3
@@ -173,22 +171,9 @@ func main() {
 			TLSConfig:       tlsCfg,
 			EnableDatagrams: true,
 		}
-		go h3.Serve(lnH3)
+		wg.Go(func() { h3.Serve(lnH3) })
 	}
 
-	// http -> https
-	h301 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/") {
-			h.ServeHTTP(w, r)
-			return
-		}
-		url := "https://" + r.Host + r.RequestURI
-		http.Redirect(w, r, url, http.StatusMovedPermanently)
-	})
-	go http.Serve(lnH1, h301)
-
-	// https
-	lnTLS := tls.NewListener(lnH2, tlsCfg)
 	s := http.Server{
 		Handler:     h,
 		IdleTimeout: 30 * time.Second,
@@ -209,12 +194,12 @@ func main() {
 		}
 
 		pln := &proxyproto.Listener{Listener: ln}
-		lnTLS := tls.NewListener(pln, tlsCfg)
 		defer pln.Close()
-		go s.Serve(lnTLS)
+		wg.Go(func() { s.Serve(tls.NewListener(pln, tlsCfg)) })
+	} else if lnH2 != nil {
+		wg.Go(func() { s.Serve(tls.NewListener(lnH2, tlsCfg)) })
 	}
-
-	s.Serve(lnTLS)
+	wg.Wait()
 }
 
 func load(proxy *led.Proxy) error {
