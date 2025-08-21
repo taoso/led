@@ -12,6 +12,7 @@ User=led
 Group=led
 KillMode=process
 Restart=on-failure
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target

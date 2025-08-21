@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -48,40 +47,20 @@ func init() {
 }
 
 func listen() (h1, h2 net.Listener, h3 net.PacketConn, err error) {
-	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
-		if os.Getenv("LISTEN_FDS") != "3" {
-			panic("LISTEN_FDS should be 3")
+	if flags.http1 != "" {
+		h1, err = net.Listen("tcp", flags.http1)
+		if err != nil {
+			return
 		}
-		names := strings.Split(os.Getenv("LISTEN_FDNAMES"), ":")
-		for i, name := range names {
-			switch name {
-			case "http":
-				f1 := os.NewFile(uintptr(i+3), "http port")
-				h1, err = net.FileListener(f1)
-			case "https":
-				f2 := os.NewFile(uintptr(i+3), "https port")
-				h2, err = net.FileListener(f2)
-			case "quic":
-				f3 := os.NewFile(uintptr(i+3), "quic port")
-				h3, err = net.FilePacketConn(f3)
-			}
+	}
+	if flags.http2 != "" {
+		h2, err = net.Listen("tcp", flags.http2)
+		if err != nil {
+			return
 		}
-	} else {
-		if flags.http1 != "" {
-			h1, err = net.Listen("tcp", flags.http1)
-			if err != nil {
-				return
-			}
-		}
-		if flags.http2 != "" {
-			h2, err = net.Listen("tcp", flags.http2)
-			if err != nil {
-				return
-			}
-		}
-		if flags.http3 != "" {
-			h3, err = net.ListenPacket("udp", flags.http3)
-		}
+	}
+	if flags.http3 != "" {
+		h3, err = net.ListenPacket("udp", flags.http3)
 	}
 	return
 }
