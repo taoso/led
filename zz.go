@@ -173,6 +173,11 @@ func (p *Proxy) zoneWebDAV(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if z.WebKey == "" {
+		http.Error(w, "Premium Feature! Apply by Email!", http.StatusBadRequest)
+		return
+	}
+
 	key := make([]byte, 32)
 	rand.Read(key)
 	z.WebKey = base64.RawURLEncoding.EncodeToString(key)
