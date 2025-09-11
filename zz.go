@@ -167,14 +167,14 @@ func (p *Proxy) zoneWebDAV(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	root := p.Root + "/" + domain + ".zz.ac"
-	if err := os.Mkdir(root, 0755); err != nil && !os.IsExist(err) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if z.WebKey == "" {
+		http.Error(w, "Premium Feature! Apply by Email!", http.StatusBadRequest)
 		return
 	}
 
-	if z.WebKey == "" {
-		http.Error(w, "Premium Feature! Apply by Email!", http.StatusBadRequest)
+	root := p.Root + "/" + domain + ".zz.ac"
+	if err := os.Mkdir(root, 0755); err != nil && !os.IsExist(err) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
