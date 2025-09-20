@@ -53,6 +53,8 @@ type Proxy struct {
 
 	DavEvs chan string
 	Root   string
+
+	ZnsUpstream string
 }
 
 func (p *Proxy) bpe(model string) *tiktoken.BPE {
@@ -190,6 +192,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	host := p.host(req.Host)
+	if strings.HasSuffix(host, "zns.lehu.in") {
+		p.ServeZNS(w, req)
+		return
+	}
+
 	if f := p.sites[host]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")

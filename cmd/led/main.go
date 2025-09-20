@@ -240,6 +240,10 @@ func load(proxy *led.Proxy) error {
 		proxy.SetZonePath(os.Getenv("ZONE_PATH"))
 	}
 
+	if up := os.Getenv("ZNS_UPSTREAM"); up != "" {
+		proxy.ZnsUpstream = up
+	}
+
 	return nil
 }
 
