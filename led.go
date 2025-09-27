@@ -197,6 +197,48 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
+		username, password, ok := req.BasicAuth()
+		if username != "" {
+			req.URL.User = url.User(username)
+		}
+		if !ok || username != "webdav" || !p.auth(username, password) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		d, err := time.ParseDuration(req.URL.Query().Get("d"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		t := time.NewTimer(d)
+		select {
+		case e := <-p.DavEvs:
+			evs := []string{e}
+			// 合并通知短时间产生的文件变更
+			time.Sleep(1 * time.Second)
+			for {
+				select {
+				case e := <-p.DavEvs:
+					evs = append(evs, e)
+				default:
+					goto resp
+				}
+			}
+		resp:
+			for _, e := range evs {
+				fmt.Println("my", e)
+				w.Write([]byte(e + "\n"))
+			}
+		case <-t.C:
+			w.WriteHeader(http.StatusNoContent)
+		}
+		return
+	}
+
 	if f := p.sites[host]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -268,48 +310,6 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 			p.chat(w, req, f)
-			return
-		}
-
-		if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
-			username, password, ok := req.BasicAuth()
-			if username != "" {
-				req.URL.User = url.User(username)
-			}
-			if !ok || username != f.Name || !p.auth(username, password) {
-				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			d, err := time.ParseDuration(req.URL.Query().Get("d"))
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			t := time.NewTimer(d)
-			select {
-			case e := <-p.DavEvs:
-				evs := []string{e}
-				// 合并通知短时间产生的文件变更
-				time.Sleep(1 * time.Second)
-				for {
-					select {
-					case e := <-p.DavEvs:
-						evs = append(evs, e)
-					default:
-						goto resp
-					}
-				}
-			resp:
-				for _, e := range evs {
-					fmt.Println("my", e)
-					w.Write([]byte(e + "\n"))
-				}
-			case <-t.C:
-				w.WriteHeader(http.StatusNoContent)
-			}
 			return
 		}
 
