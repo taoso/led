@@ -92,7 +92,7 @@ func (r sqliteTicketReop) New(token string, bytes, days int, trade, order string
 		return err
 	}
 
-	if len(ts) == 1 {
+	if len(ts) == 1 && ts[0].Expires.After(begin) {
 		begin = ts[0].Expires
 	}
 
