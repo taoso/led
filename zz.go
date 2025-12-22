@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"text/template"
@@ -84,6 +85,9 @@ func (p *Proxy) zone(w http.ResponseWriter, req *http.Request) {
 		return
 	case "v2":
 		p.zoneApplyAuth(w, req)
+		return
+	case "vps":
+		p.zoneOpenVPS(w, req)
 		return
 	}
 
@@ -617,6 +621,19 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	e := json.NewEncoder(w)
 	e.SetIndent("", "  ")
 	e.Encode(z)
+}
+
+func (p *Proxy) zoneOpenVPS(w http.ResponseWriter, req *http.Request) {
+	zone := req.URL.Query().Get("n")
+	sub := req.FormValue("sub")
+
+	vps := os.Getenv("ZZ_VPS_HOST")
+
+	domain := sub + "." + zone + ".zz.ac"
+
+	out, _ := exec.Command("ssh", "root@"+vps, domain).CombinedOutput()
+
+	w.Write([]byte(out))
 }
 
 func parseZone(origin, zone string) error {
