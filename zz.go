@@ -594,10 +594,15 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	}
 
 	content := "Hi " + z.Owner + "\n\n" +
+		"你的域名 " + z.Name + ".zz.ac 已经注册成功。\n" +
 		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
+		"管理 DNS 记录请移步 https://nic.zz.ac/#zone\n" +
 		"The DNS records can be managed via https://nic.zz.ac/#zone\n\n" +
+		"你需要在 10 天内为 https://" + z.Name + ".zz.ac 发布网站内容。\n" +
+		"否则域名将被回收。\n\n" +
 		"You need to publish your website on https://" + z.Name + ".zz.ac within 10 days.\n" +
 		"Othewise, this domain will be reclaimed.\n\n" +
+		"请务必加入社区电报群 https://t.me/zz_nic\n" +
 		"More discussion can be found in Telegram Group https://t.me/zz_nic\n\n" +
 		"zz.nic"
 
