@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,15 +12,11 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/jhillyerd/enmime"
 	"github.com/miekg/dns"
 )
-
-//go:embed *.html
-var htmls embed.FS
 
 type Zone struct {
 	Domain string
@@ -226,26 +221,7 @@ func (p *Proxy) zoneGet(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if req.URL.Query().Get("api") != "" {
-		w.Write(b)
-		return
-	}
-
-	tmpl, err := template.ParseFS(htmls, "*.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl.ExecuteTemplate(w, "zone.html", struct {
-		Zone   string
-		Domain string
-		Error  error
-		Msg    string
-	}{
-		Zone:   string(b),
-		Domain: name + ".zz.ac",
-	})
+	w.Write(b)
 }
 
 func (p *Proxy) zoneWhois(w http.ResponseWriter, req *http.Request) {
@@ -294,24 +270,13 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if req.URL.Query().Get("api") != "" {
-		var err string
-		if d.Error != nil {
-			err = d.Error.Error()
-		}
-		json.NewEncoder(w).Encode(struct {
-			Err string `json:"err"`
-		}{err})
-		return
+	var err string
+	if d.Error != nil {
+		err = d.Error.Error()
 	}
-
-	tmpl, err := template.ParseFS(htmls, "*.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl.ExecuteTemplate(w, "zone.html", d)
+	json.NewEncoder(w).Encode(struct {
+		Err string `json:"err"`
+	}{err})
 }
 
 func (p *Proxy) zoneApply(w http.ResponseWriter, req *http.Request) {
