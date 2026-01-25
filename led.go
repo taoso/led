@@ -192,10 +192,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	host := p.host(req.Host)
-	if strings.HasSuffix(host, "zns.lehu.in") {
-		p.ServeZNS(w, req)
-		return
-	}
 
 	if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
 		username, password, ok := req.BasicAuth()
