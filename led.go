@@ -250,6 +250,16 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		if req.RequestURI == "/+/alipay-order-create" && req.Method == http.MethodPost {
+			p.AlipayOrderCreate(w, req, f)
+			return
+		}
+
+		if req.RequestURI == "/+/alipay-order-notify" {
+			p.AlipayOrderNotify(w, req, f)
+			return
+		}
+
 		if req.URL.Path == "/+/ticket" && req.Method == http.MethodPost {
 			p.ServeTicket(w, req)
 			return
