@@ -19,9 +19,9 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
-	github.com/quic-go/quic-go v0.56.0
+	github.com/quic-go/quic-go v0.57.0
 	github.com/smartwalle/alipay/v3 v3.2.23
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.41.0
 	golang.org/x/image v0.21.0
 	golang.org/x/net v0.43.0
@@ -49,7 +49,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/smartwalle/ncrypto v1.0.4 // indirect
