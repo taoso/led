@@ -19,12 +19,12 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
-	github.com/quic-go/quic-go v0.56.0
+	github.com/quic-go/quic-go v0.59.0
 	github.com/smartwalle/alipay/v3 v3.2.23
-	github.com/stretchr/testify v1.9.0
-	golang.org/x/crypto v0.41.0
+	github.com/stretchr/testify v1.11.1
+	golang.org/x/crypto v0.47.0
 	golang.org/x/image v0.21.0
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.49.0
 	modernc.org/sqlite v1.33.1
 )
 
@@ -49,7 +49,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/smartwalle/ncrypto v1.0.4 // indirect
@@ -58,11 +58,11 @@ require (
 	github.com/ssor/bom v0.0.0-20170718123548-6386211fdfcf // indirect
 	golang.org/x/arch v0.0.0-20210901143047-ebb09ed340f1 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
-	golang.org/x/mod v0.27.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
-	golang.org/x/tools v0.36.0 // indirect
+	golang.org/x/mod v0.31.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/tools v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/gc/v3 v3.0.0-20241004144649-1aea3fae8852 // indirect
 	modernc.org/libc v1.61.0 // indirect
