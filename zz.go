@@ -1,6 +1,7 @@
 package led
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -106,6 +107,30 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "invalid argument", http.StatusBadRequest)
 		return
 	}
+
+	// TODO
+	// ok, err := p.zidExist(domain)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	//
+	// if ok {
+	// 	w.Write([]byte("https://zone.nic.zz.ac"))
+	// 	return
+	// }
+	//
+	// id, err := p.zidNew(z.Name, z.Owner, z.Email)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	//
+	// token, err := p.zidToken(id)
+	// if err != nil {
+	// 	w.Write([]byte("https://id.zz.ac/lc/" + token))
+	// 	return
+	// }
 
 	h := hmac.New(sha256.New, p.signKey)
 
@@ -558,6 +583,11 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// TODO
+	// 生成 zz.ID
+	// 用户名、邮箱、显示名
+	// 生成激活链接
+
 	content := "Hi " + z.Owner + "\n\n" +
 		"你的域名 " + z.Name + ".zz.ac 已经注册成功。\n" +
 		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
@@ -650,4 +680,109 @@ func parseZone(origin, zone string) error {
 		rrs[h.Name] = true
 	}
 	return zp.Err()
+}
+
+func (p *Proxy) zidExist(name string) (ok bool, err error) {
+	req, err := http.NewRequest(http.MethodGet, "https://id.zz.ac/api/users?search=", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("x-api-key", p.ZzIDAppKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	var b struct {
+		Data []struct {
+			Username string `json:"username"`
+		} `json:"data"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&b); err != nil {
+		return
+	}
+
+	for _, u := range b.Data {
+		if u.Username == name {
+			return true, nil
+		}
+	}
+	return
+}
+
+func (p *Proxy) zidNew(domain, username, email string) (id string, err error) {
+	d := struct {
+		Email         string `json:"email"`
+		UserName      string `json:"username"`
+		DisplayName   string `json:"displayName"`
+		EmailVerified bool   `json:"emailVerified"`
+	}{
+		Email:         email,
+		UserName:      domain,
+		DisplayName:   username,
+		EmailVerified: true,
+	}
+	b, err := json.Marshal(d)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://id.zz.ac/api/users", bytes.NewReader(b))
+	if err != nil {
+		return
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-api-key", p.ZzIDAppKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	var u struct {
+		ID string `json:"id"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return
+	}
+
+	return u.ID, nil
+}
+
+func (p *Proxy) zidToken(id string) (token string, err error) {
+	d := struct {
+		TTL int `json:"ttl"`
+	}{
+		TTL: 3600,
+	}
+	b, err := json.Marshal(d)
+	if err != nil {
+		return
+	}
+
+	api := "https://id.zz.ac/api/users/" + id + "/one-time-access-token"
+	req, err := http.NewRequest(http.MethodPost, api, bytes.NewReader(b))
+	if err != nil {
+		return
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-api-key", p.ZzIDAppKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	var u struct {
+		Token string `json:"token"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return
+	}
+
+	return u.Token, nil
 }

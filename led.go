@@ -55,6 +55,8 @@ type Proxy struct {
 	Root   string
 
 	ZnsUpstream string
+
+	ZzIDAppKey string
 }
 
 func (p *Proxy) bpe(model string) *tiktoken.BPE {

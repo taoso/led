@@ -244,6 +244,8 @@ func load(proxy *led.Proxy) error {
 		proxy.ZnsUpstream = up
 	}
 
+	proxy.ZzIDAppKey = os.Getenv("ZZ_ID_APP_KEY")
+
 	return nil
 }
 
