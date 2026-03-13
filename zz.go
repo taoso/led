@@ -887,7 +887,7 @@ func (p *Proxy) zzMe(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"sub":      claims.Subject,
+		"origin":   claims.Username + ".zz.ac",
 		"username": claims.Username,
 		"picture":  claims.Picture,
 	})
