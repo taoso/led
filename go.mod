@@ -12,6 +12,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-kiss/monkey v0.0.0-20230110091714-dd9fefb2c016
 	github.com/go-kiss/sqlx v0.0.0-20250514141631-7be2cb31cba2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/handlers v1.5.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jhillyerd/enmime v1.3.0
@@ -34,7 +35,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250501235452-c0086092b71a // indirect
 	github.com/google/uuid v1.6.0 // indirect

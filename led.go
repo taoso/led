@@ -57,6 +57,9 @@ type Proxy struct {
 	ZnsUpstream string
 
 	ZzIDAppKey string
+
+	ZzJWTSecret string
+	ZzOIDC      *zzOIDCConfig
 }
 
 func (p *Proxy) bpe(model string) *tiktoken.BPE {
@@ -333,6 +336,11 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			}
 			f.dav.ServeHTTP(w, req)
 			p.SendDavEvent(req, host)
+			return
+		}
+
+		if strings.HasPrefix(req.URL.Path, "/api/") {
+			p.zzAPI(w, req)
 			return
 		}
 
