@@ -920,7 +920,6 @@ func (p *Proxy) zzLogin(w http.ResponseWriter, req *http.Request) {
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", p.ZzOIDC.ClientID)
-	q.Set("redirect_uri", "https://"+req.Host+"/api/auth/callback")
 	q.Set("scope", "openid profile")
 	q.Set("state", stateStr)
 
