@@ -111,29 +111,30 @@ func (p *Proxy) zoneLink(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO
-	// ok, err := p.zidExist(domain)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-	//
-	// if ok {
-	// 	w.Write([]byte("https://zone.nic.zz.ac"))
-	// 	return
-	// }
-	//
-	// id, err := p.zidNew(z.Name, z.Owner, z.Email)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-	//
-	// token, err := p.zidToken(id)
-	// if err != nil {
-	// 	w.Write([]byte("https://id.zz.ac/lc/" + token))
-	// 	return
-	// }
+	ok, err := p.zidExist(domain)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if ok {
+		w.Write([]byte("https://zone.nic.zz.ac"))
+		return
+	}
+
+	id, err := p.zidNew(z.Name, z.Owner, z.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	token, err := p.zidToken(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("https://id.zz.ac/lc/" + token))
+	return
 
 	h := hmac.New(sha256.New, p.signKey)
 
@@ -586,22 +587,32 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO
-	// 生成 zz.ID
-	// 用户名、邮箱、显示名
-	// 生成激活链接
+	id, err := p.zidNew(z.Name, z.Owner, z.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	content := "Hi " + z.Owner + "\n\n" +
-		"你的域名 " + z.Name + ".zz.ac 已经注册成功。\n" +
-		"You domain " + z.Name + ".zz.ac has been created.\n\n" +
-		"管理 DNS 记录请移步 https://nic.zz.ac/#zone\n" +
-		"The DNS records can be managed via https://nic.zz.ac/#zone\n\n" +
-		"你需要在 10 天内为 https://" + z.Name + ".zz.ac 发布网站内容。\n" +
-		"否则域名将被回收。\n\n" +
-		"You need to publish your website on https://" + z.Name + ".zz.ac within 10 days.\n" +
-		"Othewise, this domain will be reclaimed.\n\n" +
-		"请务必加入社区电报群 https://t.me/zz_nic\n" +
-		"More discussion can be found in Telegram Group https://t.me/zz_nic\n\n" +
+	token, err := p.zidToken(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	loginLink := "https://id.zz.ac/lc/" + token
+
+	content := "Hi " + z.Owner + ",\n\n" +
+		"🎉 恭喜！你的域名 " + z.Name + ".zz.ac 已成功注册。\n" +
+		"🎉 Congratulations! Your domain " + z.Name + ".zz.ac has been successfully registered.\n\n" +
+		"🔑 点击以下链接激活 zz.ID（链接 1 小时内有效）：\n" +
+		"🔑 Click the link below to activate your zz.ID (expires in 1 hour):\n" +
+		loginLink + "\n\n" +
+		"⚙️  激活后，请前往 https://zone.nic.zz.ac 管理你的 DNS 记录。\n" +
+		"⚙️  Once activated, visit https://zone.nic.zz.ac to manage your DNS records.\n\n" +
+		"⏰ 请在 10 天内在 https://" + z.Name + ".zz.ac 上发布网站内容，否则域名将被回收。\n" +
+		"⏰ Please publish your website at https://" + z.Name + ".zz.ac within 10 days, or the domain will be reclaimed.\n\n" +
+		"💬 欢迎加入社区电报群：https://t.me/zz_nic\n" +
+		"💬 Join our Telegram community: https://t.me/zz_nic\n\n" +
 		"zz.nic"
 
 	m := enmime.Builder().
@@ -685,28 +696,43 @@ func parseZone(origin, zone string) error {
 	return zp.Err()
 }
 
-func (p *Proxy) zidExist(name string) (ok bool, err error) {
-	req, err := http.NewRequest(http.MethodGet, "https://id.zz.ac/api/users?search=", nil)
+func (p *Proxy) zidDo(method, api string, body, out any) error {
+	var r io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		r = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, api, r)
 	if err != nil {
-		return
+		return err
 	}
 	req.Header.Set("x-api-key", p.ZzIDAppKey)
-
+	if body != nil {
+		req.Header.Set("content-type", "application/json")
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return
+		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("zid api %s %s: %s", method, api, resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
 
+func (p *Proxy) zidExist(name string) (ok bool, err error) {
 	var b struct {
 		Data []struct {
 			Username string `json:"username"`
 		} `json:"data"`
 	}
-	if err = json.NewDecoder(resp.Body).Decode(&b); err != nil {
+	if err = p.zidDo(http.MethodGet, "https://id.zz.ac/api/users?search="+name, nil, &b); err != nil {
 		return
 	}
-
 	for _, u := range b.Data {
 		if u.Username == name {
 			return true, nil
@@ -715,78 +741,38 @@ func (p *Proxy) zidExist(name string) (ok bool, err error) {
 	return
 }
 
-func (p *Proxy) zidNew(domain, username, email string) (id string, err error) {
-	d := struct {
+func (p *Proxy) zidNew(userName, displayName, email string) (id string, err error) {
+	body := struct {
 		Email         string `json:"email"`
 		UserName      string `json:"username"`
 		DisplayName   string `json:"displayName"`
 		EmailVerified bool   `json:"emailVerified"`
 	}{
 		Email:         email,
-		UserName:      domain,
-		DisplayName:   username,
+		UserName:      userName,
+		DisplayName:   displayName,
 		EmailVerified: true,
 	}
-	b, err := json.Marshal(d)
-	if err != nil {
-		return
-	}
-
-	req, err := http.NewRequest(http.MethodPost, "https://id.zz.ac/api/users", bytes.NewReader(b))
-	if err != nil {
-		return
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", p.ZzIDAppKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
 	var u struct {
 		ID string `json:"id"`
 	}
-	if err = json.NewDecoder(resp.Body).Decode(&u); err != nil {
+	if err = p.zidDo(http.MethodPost, "https://id.zz.ac/api/users", body, &u); err != nil {
 		return
 	}
-
 	return u.ID, nil
 }
 
 func (p *Proxy) zidToken(id string) (token string, err error) {
-	d := struct {
-		TTL int `json:"ttl"`
-	}{
-		TTL: 3600,
-	}
-	b, err := json.Marshal(d)
-	if err != nil {
-		return
-	}
-
 	api := "https://id.zz.ac/api/users/" + id + "/one-time-access-token"
-	req, err := http.NewRequest(http.MethodPost, api, bytes.NewReader(b))
-	if err != nil {
-		return
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", p.ZzIDAppKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
+	body := struct {
+		TTL int `json:"ttl"`
+	}{3600}
 	var u struct {
 		Token string `json:"token"`
 	}
-	if err = json.NewDecoder(resp.Body).Decode(&u); err != nil {
+	if err = p.zidDo(http.MethodPost, api, body, &u); err != nil {
 		return
 	}
-
 	return u.Token, nil
 }
 
