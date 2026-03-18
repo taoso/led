@@ -1081,6 +1081,11 @@ func (p *Proxy) zzZonePut(w http.ResponseWriter, req *http.Request, name string)
 		return
 	}
 
+	if err = parseZone(name+".", string(body)); err != nil {
+		zzError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	if err := os.WriteFile(p.zzZonePath(name), body, 0644); err != nil {
 		zzError(w, http.StatusInternalServerError, err.Error())
 		return
