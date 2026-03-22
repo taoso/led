@@ -604,8 +604,8 @@ func (p *Proxy) zoneApplyAuth(w http.ResponseWriter, req *http.Request) {
 	content := "Hi " + z.Owner + ",\n\n" +
 		"🎉 恭喜！你的域名 " + z.Name + ".zz.ac 已成功注册。\n" +
 		"🎉 Congratulations! Your domain " + z.Name + ".zz.ac has been successfully registered.\n\n" +
-		"🔑 点击以下链接激活 zz.ID（链接 1 小时内有效）：\n" +
-		"🔑 Click the link below to activate your zz.ID (expires in 1 hour):\n" +
+		"🔑 点击以下链接激活 zz.ID（链接 1 天内有效）：\n" +
+		"🔑 Click the link below to activate your zz.ID (expires in 1 day):\n" +
 		loginLink + "\n\n" +
 		"⚙️  激活后，请前往 https://zone.nic.zz.ac 管理你的 DNS 记录。\n" +
 		"⚙️  Once activated, visit https://zone.nic.zz.ac to manage your DNS records.\n\n" +
@@ -766,7 +766,7 @@ func (p *Proxy) zidToken(id string) (token string, err error) {
 	api := "https://id.zz.ac/api/users/" + id + "/one-time-access-token"
 	body := struct {
 		TTL int `json:"ttl"`
-	}{3600}
+	}{86400}
 	var u struct {
 		Token string `json:"token"`
 	}
