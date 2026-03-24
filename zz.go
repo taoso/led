@@ -842,6 +842,8 @@ func (p *Proxy) zzAPI(w http.ResponseWriter, req *http.Request) {
 		p.zzLogin(w, req)
 	case path == "/api/auth/callback" && req.Method == http.MethodGet:
 		p.zzCallback(w, req)
+	case path == "/api/tiny-vps" && req.Method == http.MethodPost:
+		p.zzTinyVPS(w, req)
 	case strings.HasPrefix(path, "/api/zones/"):
 		name, err := url.PathUnescape(strings.TrimPrefix(path, "/api/zones/"))
 		if err != nil || name == "" {
@@ -1142,4 +1144,33 @@ func zzError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func (p *Proxy) zzTinyVPS(w http.ResponseWriter, req *http.Request) {
+	claims, err := p.zzVerifyAuth(req)
+	if err != nil {
+		if err.Error() == "no cookie" {
+			zzError(w, http.StatusUnauthorized, "Unauthorized")
+		} else {
+			zzError(w, http.StatusUnauthorized, "Token invalid or expired")
+		}
+		return
+	}
+
+	vps := os.Getenv("ZZ_VPS_HOST")
+
+	var data struct {
+		Hostname string `json:"hostname"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
+		zzError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	domain := data.Hostname + "." + claims.Username + ".zz.ac"
+
+	out, _ := exec.Command("ssh", "root@"+vps, domain).CombinedOutput()
+
+	w.Write([]byte(out))
 }
