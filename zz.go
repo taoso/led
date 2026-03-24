@@ -844,6 +844,8 @@ func (p *Proxy) zzAPI(w http.ResponseWriter, req *http.Request) {
 		p.zzCallback(w, req)
 	case path == "/api/tiny-vps" && req.Method == http.MethodPost:
 		p.zzTinyVPS(w, req)
+	case path == "/api/email/reset-password" && req.Method == http.MethodPost:
+		p.zzEmailResetPassword(w, req)
 	case strings.HasPrefix(path, "/api/zones/"):
 		name, err := url.PathUnescape(strings.TrimPrefix(path, "/api/zones/"))
 		if err != nil || name == "" {
@@ -1157,6 +1159,8 @@ func (p *Proxy) zzTinyVPS(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	defer req.Body.Close()
+
 	vps := os.Getenv("ZZ_VPS_HOST")
 
 	var data struct {
@@ -1173,4 +1177,51 @@ func (p *Proxy) zzTinyVPS(w http.ResponseWriter, req *http.Request) {
 	out, _ := exec.Command("ssh", "root@"+vps, domain).CombinedOutput()
 
 	w.Write([]byte(out))
+}
+
+func (p *Proxy) zzEmailResetPassword(w http.ResponseWriter, req *http.Request) {
+	claims, err := p.zzVerifyAuth(req)
+	if err != nil {
+		if err.Error() == "no cookie" {
+			zzError(w, http.StatusUnauthorized, "Unauthorized")
+		} else {
+			zzError(w, http.StatusUnauthorized, "Token invalid or expired")
+		}
+		return
+	}
+
+	req, err = http.NewRequest(http.MethodPost, os.Getenv("ZZ_EMAIL_PASSAPI"), nil)
+	if err != nil {
+		zzError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	req.Header.Set("x-email", claims.Username+"@zz.ac")
+	req.Header.Set("x-api-key", os.Getenv("ZZ_EMAIL_PASSKEY"))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		zzError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		zzError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if len(b) == 0 {
+		zzError(w, http.StatusBadGateway, "upstream return empty password")
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		zzError(w, http.StatusBadGateway, fmt.Sprintf("invalid upstream status %d", resp.StatusCode))
+		return
+	}
+
+	data := struct {
+		Password string `json:"password"`
+	}{string(b)}
+
+	json.NewEncoder(w).Encode(data)
 }
