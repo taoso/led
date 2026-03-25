@@ -787,6 +787,7 @@ type zzOIDCConfig struct {
 
 // zzJWTClaims is the payload stored in Zone Editor JWTs.
 type zzJWTClaims struct {
+	Name     string `json:"n"`
 	Username string `json:"u"`
 	Picture  string `json:"p"`
 	jwt.RegisteredClaims
@@ -878,6 +879,7 @@ func (p *Proxy) zzMe(w http.ResponseWriter, req *http.Request) {
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"origin":   claims.Username + ".zz.ac",
+		"name":     claims.Name,
 		"username": claims.Username,
 		"picture":  claims.Picture,
 	})
@@ -979,8 +981,9 @@ func (p *Proxy) zzCallback(w http.ResponseWriter, req *http.Request) {
 
 	var userinfo struct {
 		Sub               string `json:"sub"`
-		PreferredUsername string `json:"preferred_username"`
+		Name              string `json:"name"`
 		Picture           string `json:"picture"`
+		PreferredUsername string `json:"preferred_username"`
 	}
 	if err := json.NewDecoder(uResp.Body).Decode(&userinfo); err != nil {
 		zzError(w, http.StatusInternalServerError, "invalid userinfo response")
@@ -993,10 +996,10 @@ func (p *Proxy) zzCallback(w http.ResponseWriter, req *http.Request) {
 
 	now := time.Now()
 	claims := zzJWTClaims{
+		Name:     userinfo.Name,
 		Username: userinfo.PreferredUsername,
 		Picture:  userinfo.Picture,
 		RegisteredClaims: jwt.RegisteredClaims{
-			// Subject:   userinfo.Sub,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
 		},
