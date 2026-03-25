@@ -900,6 +900,7 @@ func (p *Proxy) zzLogin(w http.ResponseWriter, req *http.Request) {
 	state := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
+		Subject:   req.URL.Query().Get("from"),
 	})
 	stateStr, err := state.SignedString([]byte(p.ZzJWTSecret))
 	if err != nil {
@@ -930,7 +931,7 @@ func (p *Proxy) zzCallback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	stateToken, err := jwt.Parse(state, func(t *jwt.Token) (interface{}, error) {
+	stateToken, err := jwt.Parse(state, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -1008,7 +1009,13 @@ func (p *Proxy) zzCallback(w http.ResponseWriter, req *http.Request) {
 	}
 
 	p.zzSetCookie(w, req, signed, 3600)
-	http.Redirect(w, req, "/", http.StatusFound)
+
+	fromUrl, _ := stateToken.Claims.GetSubject()
+	if fromUrl == "" {
+		fromUrl = "/"
+	}
+
+	http.Redirect(w, req, fromUrl, http.StatusFound)
 }
 
 // zeZoneGet handles GET /api/zones/:name.
