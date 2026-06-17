@@ -291,6 +291,10 @@ func (p *Proxy) zonePut(w http.ResponseWriter, req *http.Request) {
 		d.Error = parseZone(name+".zz.ac.", zone)
 	}
 
+	if !strings.HasSuffix(zone, "\n") {
+		zone = strings.TrimRight(zone, "\r\n") + "\n"
+	}
+
 	if d.Error == nil {
 		db := p.zPath + "/zz.ac/" + name + ".zone"
 		d.Error = os.WriteFile(db, []byte(zone), os.FileMode(0644))
@@ -1073,8 +1077,10 @@ func (p *Proxy) zzZonePut(w http.ResponseWriter, req *http.Request, name string)
 		return
 	}
 
+	zone := strings.TrimSpace(string(body))
+
 	if strings.EqualFold(req.Header.Get("X-Mode"), "desec") {
-		token := strings.TrimSpace(string(body))
+		token := zone
 		if token == "" {
 			zzError(w, http.StatusBadRequest, "Token required")
 			return
@@ -1095,12 +1101,14 @@ func (p *Proxy) zzZonePut(w http.ResponseWriter, req *http.Request, name string)
 		return
 	}
 
-	if err = parseZone(name+".", string(body)); err != nil {
+	zone = zone + "\n"
+
+	if err = parseZone(name+".", zone); err != nil {
 		zzError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if err := os.WriteFile(p.zzZonePath(name), body, 0644); err != nil {
+	if err := os.WriteFile(p.zzZonePath(name), []byte(zone), 0644); err != nil {
 		zzError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
