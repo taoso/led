@@ -22,6 +22,7 @@ tmp=$dir/index.yml
 # 所以 title 变量为空，pandoc 会输出警告信息
 echo "title: no_warn" > $tmp
 echo "site_title: $site_title" >> $tmp
+echo "ga_id: \"\"" >> $tmp
 echo "articles:" >> $tmp
 
 find $dir -name '*.yml' \
