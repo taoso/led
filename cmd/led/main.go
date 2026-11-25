@@ -23,8 +23,6 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/taoso/led"
 	"github.com/taoso/led/pay"
-	"github.com/taoso/led/store"
-	"github.com/taoso/led/tiktoken"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/idna"
 )
@@ -182,44 +180,12 @@ func main() {
 }
 
 func load(proxy *led.Proxy) error {
-	if tk := os.Getenv("TIKTOKEN_FILE"); tk != "" {
-		bpes := map[string]*tiktoken.BPE{}
-		for _, kv := range strings.Split(tk, ",") {
-			name := "cl100k_base"
-			path := kv
-			if ps := strings.Split(kv, "="); len(ps) == 2 {
-				name = ps[0]
-				path = ps[1]
-			}
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			bpe, err := tiktoken.NewCL100K(f)
-			if err != nil {
-				return err
-			}
-			bpes[name] = bpe
-		}
-
-		proxy.BPEs = bpes
-	}
-
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
 		proxy.Alipay = pay.New(
 			id,
 			os.Getenv("ALIPAY_PRIVATE_KEY"),
 			os.Getenv("ALIPAY_PUBLIC_KEY"),
 		)
-	}
-
-	if db := os.Getenv("TOKEN_REPO_DB"); db != "" {
-		proxy.TokenRepo = store.NewTokenRepo(db)
-	}
-
-	if db := os.Getenv("TICKET_REPO_DB"); db != "" {
-		proxy.TicketRepo = store.NewTicketRepo(db)
 	}
 
 	d, err := loadfile(users)
@@ -233,20 +199,6 @@ func load(proxy *led.Proxy) error {
 		return err
 	}
 	proxy.SetSites(d)
-
-	if db := os.Getenv("ZONE_REPO_DB"); db != "" {
-		proxy.ZoneRepo = store.NewZoneRepo(db)
-		proxy.SetKey(os.Getenv("HMAC_SIGN_KEY"))
-		proxy.SetZonePath(os.Getenv("ZONE_PATH"))
-	}
-
-	if up := os.Getenv("ZNS_UPSTREAM"); up != "" {
-		proxy.ZnsUpstream = up
-	}
-
-	if err := proxy.InitZzAuth(); err != nil {
-		return err
-	}
 
 	return nil
 }
