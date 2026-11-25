@@ -62,7 +62,7 @@ func (p *Proxy) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *F
 		return
 	}
 
-	if args.Created.Sub(time.Now()).Abs() > 5*time.Minute {
+	if time.Until(args.Created).Abs() > 5*time.Minute {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("client time is inaccurate"))
 		return
