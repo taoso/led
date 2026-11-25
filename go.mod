@@ -18,7 +18,7 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
-	github.com/quic-go/quic-go v0.59.0
+	github.com/quic-go/quic-go v0.59.1
 	github.com/smartwalle/alipay/v3 v3.2.23
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.48.0
