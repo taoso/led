@@ -25,21 +25,9 @@ The site content is served from the `-root` directory: all files in
 `/tmp/led.example/` will be published to the Internet. A site without its
 own directory falls back to `root/default`.
 
-And then create a text file named users.txt with the following content
-
-```
-name:passwrd
-```
-
-The password need to be encrypted by bcrypt. You can use the htpasswd:
-
-```
-htpasswd -B -c ./users.txt foo
-```
-
 And then start the led,
 ```
-sudo ./led -root /tmp -sites sites.txt -users users.txt
+sudo ./led -root /tmp -sites sites.txt
 ```
 
 led uses https://letsencrypt.org so sign a https certificate automically.
@@ -53,9 +41,6 @@ Every site owns a directory under `-root` and is published at its host name.
 - `rewrite.txt` — one rule per line, `old/path -> new/path`. Prefix `@` for a
   temporary (307) redirect, prefix `~` to append the original request URI.
   The first matching rule wins.
-- `/+/dav` — WebDAV publishing, authenticated with an account from users.txt
-  whose name equals the site name.
-- `/+/dav-events` — long polling stream of `.md` file changes, used by editors.
 - `/+/mail` — `POST` a comment form, delivered by SMTP to the author address
   configured in `root/<host>/env`.
 - `/+/push` — Web Push notification, keys taken from `root/<host>/env`.
@@ -71,4 +56,4 @@ Every site owns a directory under `-root` and is published at its host name.
 | `APP_PUBKEY_<app>` | ed25519 public key of an alipay API caller |
 | `SOCK_PATH` | listen on a unix socket instead of the h2 port |
 
-Send `SIGHUP` to reload `sites.txt` and `users.txt` without restarting.
+Send `SIGHUP` to reload `sites.txt` without restarting.

@@ -6,7 +6,7 @@ Requires=lehu-http.socket lehu-https.socket lehu-quic.socket
 [Service]
 LimitNOFILE=8192
 EnvironmentFile=/usr/local/etc/lehu/env
-ExecStart=/usr/local/bin/led -root /home/led/sync -users /usr/local/etc/lehu/users.txt -sites /usr/local/etc/lehu/sites.txt
+ExecStart=/usr/local/bin/led -root /home/led/sync -sites /usr/local/etc/lehu/sites.txt
 ExecReload=/bin/kill -HUP $MAINPID
 User=led
 Group=led

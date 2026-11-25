@@ -27,7 +27,7 @@ import (
 	"golang.org/x/net/idna"
 )
 
-var root, sites, users string
+var root, sites string
 
 var flags struct {
 	http1, http2, http3 string
@@ -36,7 +36,6 @@ var flags struct {
 func init() {
 	flag.StringVar(&root, "root", "", "static server root")
 	flag.StringVar(&sites, "sites", "", "static server sites")
-	flag.StringVar(&users, "users", "", "proxy server users")
 	flag.StringVar(&flags.http1, "http1", "", "listen address for http1")
 	flag.StringVar(&flags.http2, "http2", "", "listen address for http2")
 	flag.StringVar(&flags.http3, "http3", "", "listen address for http3")
@@ -72,8 +71,7 @@ func main() {
 	}
 
 	proxy := &led.Proxy{
-		DavEvs: make(chan string, 1024),
-		Root:   root,
+		Root: root,
 	}
 
 	if err := load(proxy); err != nil {
@@ -188,13 +186,7 @@ func load(proxy *led.Proxy) error {
 		)
 	}
 
-	d, err := loadfile(users)
-	if err != nil {
-		return err
-	}
-	proxy.SetUsers(d)
-
-	d, err = loadfile(sites)
+	d, err := loadfile(sites)
 	if err != nil {
 		return err
 	}

@@ -1,43 +1,25 @@
 package led
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/taoso/led/pay"
-	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/idna"
 )
 
 // Proxy serves static sites published under the root dir
 type Proxy struct {
 	sites map[string]*FileHandler
-	users map[string]string
 
 	Alipay *pay.Alipay
 
 	AltSvc string
 
-	DavEvs chan string
-	Root   string
-}
-
-func (p *Proxy) auth(username, password string) bool {
-	hash, ok := p.users[username]
-	if !ok {
-		return false
-	}
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
-}
-
-func (p *Proxy) SetUsers(users map[string]string) {
-	p.users = users
+	Root string
 }
 
 func (p *Proxy) SetSites(sites map[string]string) {
@@ -94,48 +76,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 	host := p.host(req.Host)
 
-	if strings.HasPrefix(req.RequestURI, "/+/dav-events") {
-		username, password, ok := req.BasicAuth()
-		if username != "" {
-			req.URL.User = url.User(username)
-		}
-		if !ok || username != "webdav" || !p.auth(username, password) {
-			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		d, err := time.ParseDuration(req.URL.Query().Get("d"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		t := time.NewTimer(d)
-		select {
-		case e := <-p.DavEvs:
-			evs := []string{e}
-			// 合并通知短时间产生的文件变更
-			time.Sleep(1 * time.Second)
-			for {
-				select {
-				case e := <-p.DavEvs:
-					evs = append(evs, e)
-				default:
-					goto resp
-				}
-			}
-		resp:
-			for _, e := range evs {
-				fmt.Println("my", e)
-				w.Write([]byte(e + "\n"))
-			}
-		case <-t.C:
-			w.WriteHeader(http.StatusNoContent)
-		}
-		return
-	}
-
 	if f := p.sites[host]; f != nil {
 		if strings.HasSuffix(req.RequestURI, "/index.htm") {
 			localRedirect(w, req, "./")
@@ -162,49 +102,11 @@ func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(req.URL.Path, "/+/dav") {
-			username, password, ok := req.BasicAuth()
-			if username != "" {
-				req.URL.User = url.User(username)
-			}
-			if !ok || username != f.Name || !p.auth(username, password) {
-				w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-			f.dav.ServeHTTP(w, req)
-			p.SendDavEvent(req, host)
-			return
-		}
-
 		if f.Rewritten(w, req) {
 			return
 		}
 
 		f.fs.ServeHTTP(w, req)
 		return
-	}
-}
-
-func (p *Proxy) SendDavEvent(req *http.Request, host string) {
-	if !strings.HasSuffix(req.URL.Path, ".md") {
-		return
-	}
-
-	var e string
-	switch req.Method {
-	case "DELETE", "MOVE":
-		e = "-" + host + "/" + strings.TrimLeft(req.URL.Path, "/+/dav/")
-	case "COPY", "PUT":
-		e = "+" + host
-	}
-
-	if e == "" {
-		return
-	}
-
-	select {
-	case p.DavEvs <- e:
-	default:
 	}
 }
