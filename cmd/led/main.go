@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/handlers"
 	"github.com/taoso/led"
 	"github.com/taoso/led/pay"
 )
@@ -61,10 +60,8 @@ func main() {
 		}
 	}()
 
-	h := handlers.VhostCombinedLoggingHandler(os.Stdout, proxy)
-
 	s := &http.Server{
-		Handler:     h,
+		Handler:     proxy,
 		IdleTimeout: 30 * time.Second,
 	}
 
