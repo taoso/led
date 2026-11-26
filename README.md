@@ -2,7 +2,8 @@
 
 lehu daemon
 
-led is a multi-tenant static site server with automatic https.
+led is a multi-tenant static site server. It speaks plain http and is meant to
+run behind a reverse proxy which terminates TLS.
 
 # quick start
 
@@ -30,9 +31,9 @@ And then start the led,
 sudo ./led -root /tmp -sites sites.txt
 ```
 
-led uses https://letsencrypt.org so sign a https certificate automically.
-
-led will listen on 80/443 tcp port and 443 udp port for h3.
+led does not terminate TLS itself. Run it behind a reverse proxy and point the
+proxy at the `-http1` listen address, binding it to localhost or an internal
+interface.
 
 # site features
 
@@ -54,6 +55,5 @@ Every site owns a directory under `-root` and is published at its host name.
 | `SMTP_USER` / `SMTP_PASS` / `SMTP_HOST` | outgoing mail for `/+/mail` |
 | `ALIPAY_APP_ID` / `ALIPAY_PRIVATE_KEY` / `ALIPAY_PUBLIC_KEY` | alipay client |
 | `APP_PUBKEY_<app>` | ed25519 public key of an alipay API caller |
-| `SOCK_PATH` | listen on a unix socket instead of the h2 port |
 
 Send `SIGHUP` to reload `sites.txt` without restarting.

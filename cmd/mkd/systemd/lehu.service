@@ -1,7 +1,7 @@
 [Unit]
 Description=lehu http service
 After=network.target
-Requires=lehu-http.socket lehu-https.socket lehu-quic.socket
+Requires=lehu-http.socket
 
 [Service]
 LimitNOFILE=8192

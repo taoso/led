@@ -17,8 +17,6 @@ type Proxy struct {
 
 	Alipay *pay.Alipay
 
-	AltSvc string
-
 	Root string
 }
 
@@ -56,9 +54,6 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Alt-Svc", p.AltSvc)
-	w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
-
 	origin := req.Header.Get("Origin")
 	if u, err := url.Parse(origin); err == nil {
 		if p.MySite(p.host(u.Host)) {
