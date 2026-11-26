@@ -2,10 +2,10 @@ package led
 
 import (
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/smartwalle/alipay/v3"
 	"golang.org/x/net/idna"
@@ -13,31 +13,33 @@ import (
 
 // LED serves static sites published under the root dir
 type LED struct {
-	sites map[string]*FileHandler
-
-	alipay *alipay.Client
-
 	Root string
+
+	mux    http.Handler
+	once   sync.Once
+	sites  sync.Map // host -> *FileHandler
+	alipay *alipay.Client
 }
 
-func (p *LED) SetSites(sites map[string]string) {
-	hs := make(map[string]*FileHandler, len(sites))
-	for name := range sites {
-		hs[name] = NewHandler(p.Root, name)
+// site returns the handler serving that host, creating it on first use.
+// Hosts without their own directory fall back to root/default; only real
+// sites are cached, so a newly created directory takes effect right away.
+func (p *LED) site(host string) *FileHandler {
+	if v, ok := p.sites.Load(host); ok {
+		return v.(*FileHandler)
 	}
-
-	p.sites = hs
-}
-
-func (p *LED) MySite(name string) bool {
-	_, ok := p.sites[name]
-	return ok
+	f := NewHandler(p.Root, host)
+	if f.own {
+		p.sites.Store(host, f)
+	}
+	return f
 }
 
 func (p *LED) host(host string) string {
 	if i := strings.Index(host, ":"); i > 0 {
 		host = host[:i]
 	}
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
 	host, err := idna.ToUnicode(host)
 	if err != nil {
 		log.Println("host idna.ToUnicode error", host, err)
@@ -55,53 +57,51 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 
 func (p *LED) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
-	if u, err := url.Parse(origin); err == nil {
-		if p.MySite(p.host(u.Host)) {
+	if u, err := url.Parse(origin); err == nil && u.Host != "" {
+		if p.site(p.host(u.Host)).own {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 	}
 
-	if ip := req.Header.Get("CF-Connecting-IP"); ip != "" {
-		_, port, _ := net.SplitHostPort(req.RemoteAddr)
-		req.RemoteAddr = ip + ":" + port
-	}
-	p.serveLocal(w, req)
+	p.once.Do(func() { p.mux = p.routes() })
+	p.mux.ServeHTTP(w, req)
 }
 
-func (p *LED) serveLocal(w http.ResponseWriter, req *http.Request) {
-	host := p.host(req.Host)
+func (p *LED) routes() http.Handler {
+	mux := http.NewServeMux()
 
-	if f := p.sites[host]; f != nil {
-		if strings.HasSuffix(req.RequestURI, "/index.htm") {
-			localRedirect(w, req, "./")
-			return
-		}
+	mux.HandleFunc("POST /+/alipay-order-create", func(w http.ResponseWriter, req *http.Request) {
+		p.AlipayOrderCreate(w, req, p.siteOf(req))
+	})
+	mux.HandleFunc("/+/alipay-order-notify", func(w http.ResponseWriter, req *http.Request) {
+		p.AlipayOrderNotify(w, req, p.siteOf(req))
+	})
+	mux.HandleFunc("POST /+/mail", func(w http.ResponseWriter, req *http.Request) {
+		p.Comment(p.host(req.Host), w, req)
+	})
+	mux.HandleFunc("POST /+/push", func(w http.ResponseWriter, req *http.Request) {
+		p.siteOf(req).webPush(w, req)
+	})
+	mux.HandleFunc("/", p.static)
 
-		if req.RequestURI == "/+/alipay-order-create" && req.Method == http.MethodPost {
-			p.AlipayOrderCreate(w, req, f)
-			return
-		}
+	return mux
+}
 
-		if req.RequestURI == "/+/alipay-order-notify" {
-			p.AlipayOrderNotify(w, req, f)
-			return
-		}
+func (p *LED) siteOf(req *http.Request) *FileHandler {
+	return p.site(p.host(req.Host))
+}
 
-		if req.RequestURI == "/+/mail" && req.Method == http.MethodPost {
-			p.Comment(host, w, req)
-			return
-		}
+func (p *LED) static(w http.ResponseWriter, req *http.Request) {
+	f := p.siteOf(req)
 
-		if req.RequestURI == "/+/push" && req.Method == http.MethodPost {
-			f.webPush(w, req)
-			return
-		}
-
-		if f.Rewritten(w, req) {
-			return
-		}
-
-		f.fs.ServeHTTP(w, req)
+	if strings.HasSuffix(req.URL.Path, "/index.htm") {
+		localRedirect(w, req, "./")
 		return
 	}
+
+	if f.Rewritten(w, req) {
+		return
+	}
+
+	f.fs.ServeHTTP(w, req)
 }

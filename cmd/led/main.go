@@ -1,108 +1,47 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"flag"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/taoso/led"
 )
 
-var root, sites, http1 string
+var root, http1 string
 
 func init() {
 	flag.StringVar(&root, "root", "", "static server root")
-	flag.StringVar(&sites, "sites", "", "static server sites")
 	flag.StringVar(&http1, "http1", "", "listen address for http1")
 
 	log.SetOutput(os.Stderr)
 }
 
-func listen() (net.Listener, error) {
-	if http1 == "" {
-		return nil, errors.New("-http1 is required")
-	}
-	return net.Listen("tcp", http1)
-}
-
 func main() {
 	flag.Parse()
 
-	lnH1, err := listen()
+	lnH1, err := net.Listen("tcp", http1)
 	if err != nil {
 		panic(err)
 	}
 
-	svr := &led.LED{
-		Root: root,
-	}
+	svr := &led.LED{Root: root}
 
-	if err := load(svr); err != nil {
-		panic(err)
-	}
-
-	s := &http.Server{
-		Handler:     svr,
-		IdleTimeout: 30 * time.Second,
-	}
-
-	log.Println("listening on", lnH1.Addr())
-	log.Fatal(s.Serve(lnH1))
-}
-
-func load(proxy *led.LED) error {
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
-		err := proxy.SetAlipay(
+		err := svr.SetAlipay(
 			id,
 			os.Getenv("ALIPAY_PRIVATE_KEY"),
 			os.Getenv("ALIPAY_PUBLIC_KEY"),
 		)
 		if err != nil {
-			return err
+			panic(err)
 		}
 	}
 
-	d, err := loadfile(sites)
-	if err != nil {
-		return err
-	}
-	proxy.SetSites(d)
+	s := &http.Server{Handler: svr}
 
-	return nil
-}
-
-func loadfile(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	s := bufio.NewScanner(f)
-	kv := map[string]string{}
-	for s.Scan() {
-		l := s.Text()
-		if strings.HasPrefix(l, "#") {
-			continue
-		}
-		i := strings.Index(l, ":")
-		if i == -1 {
-			i = len(l)
-		}
-
-		host := l[:i]
-		kv[host] = l[i+1:]
-	}
-
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-
-	return kv, nil
+	log.Println("listening on", lnH1.Addr())
+	log.Fatal(s.Serve(lnH1))
 }

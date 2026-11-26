@@ -12,20 +12,22 @@ import (
 type FileHandler struct {
 	Root string
 	Name string
+	own  bool
 	fs   http.Handler
 }
 
 func NewHandler(root string, name string) *FileHandler {
-	path := filepath.Join(root, name)
+	dir, own := filepath.Join(root, name), true
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		path = filepath.Join(root, "default")
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		dir, own = filepath.Join(root, "default"), false
 	}
 
 	return &FileHandler{
-		Root: path,
+		Root: dir,
 		Name: name,
-		fs:   http.FileServer(leDir{http.Dir(path)}),
+		own:  own,
+		fs:   http.FileServer(leDir{http.Dir(dir)}),
 	}
 }
 
