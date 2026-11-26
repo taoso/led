@@ -62,6 +62,12 @@ return {{
     -- if path_tag ~= "" then table.insert(tags, path_tag) end
     -- if next(tags) ~= nil then meta.tags = tags end
     if next(refs) ~= nil then meta.refs = refs end
+
+    -- index 决定这条记录要不要出现在 index.htm，缺省为 true；
+    -- 不补默认值的话模板会把空串直接写进 JSON，产出 "index":  }
+    if meta.index == nil then
+      meta.index = true
+    end
     return meta
   end,
   Link = function (link)
