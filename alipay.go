@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/taoso/led/pay"
+	"github.com/smartwalle/alipay/v3"
 )
 
 type alipayOrderArgs struct {
@@ -23,6 +23,18 @@ type alipayOrderArgs struct {
 	Created time.Time `json:"created"`  // 请求时间
 
 	NotifyURL string `json:"notify_url,omitempty"` // 异步通知地址
+}
+
+func (p *LED) SetAlipay(appID, privateKey, publicKey string) error {
+	c, err := alipay.New(appID, privateKey, true)
+	if err != nil {
+		return err
+	}
+	if err := c.LoadAliPayPublicKey(publicKey); err != nil {
+		return err
+	}
+	p.alipay = c
+	return nil
 }
 
 func (p *LED) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *FileHandler) {
@@ -78,28 +90,37 @@ func (p *LED) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *Fil
 	extras.Set("url", args.NotifyURL)
 	extras.Set("extra", args.Extra)
 
-	order := pay.Order{
-		TradeNo:   args.OrderID,
-		Amount:    strconv.FormatFloat(float64(args.CentNum)/100, 'f', 2, 64),
-		Subject:   args.Subject,
-		Extra:     extras.Encode(),
-		NotifyURL: "https://" + f.Name + "/+/alipay-order-notify",
+	order := alipay.TradePreCreate{
+		Trade: alipay.Trade{
+			NotifyURL:      "https://" + f.Name + "/+/alipay-order-notify",
+			Subject:        args.Subject,
+			OutTradeNo:     args.OrderID,
+			TotalAmount:    strconv.FormatFloat(float64(args.CentNum)/100, 'f', 2, 64),
+			PassbackParams: extras.Encode(),
+			TimeoutExpress: "15m",
+		},
 	}
-	qr, err := p.Alipay.CreateQR(order)
+	r, err := p.alipay.TradePreCreate(req.Context(), order)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
+	if r.Code != alipay.CodeSuccess {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(r.SubCode + " " + r.SubMsg))
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"qr":  qr,
+		"qr":  r.QRCode,
 		"ttl": 900,
 	})
 }
 
 func (p *LED) AlipayOrderNotify(w http.ResponseWriter, req *http.Request, f *FileHandler) {
-	trade, err := p.Alipay.GetNotification(req)
+	trade, err := p.alipay.GetTradeNotification(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

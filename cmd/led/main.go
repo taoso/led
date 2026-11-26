@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/taoso/led"
-	"github.com/taoso/led/pay"
 )
 
 var root, sites, http1 string
@@ -59,11 +58,14 @@ func main() {
 
 func load(proxy *led.LED) error {
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
-		proxy.Alipay = pay.New(
+		err := proxy.SetAlipay(
 			id,
 			os.Getenv("ALIPAY_PRIVATE_KEY"),
 			os.Getenv("ALIPAY_PUBLIC_KEY"),
 		)
+		if err != nil {
+			return err
+		}
 	}
 
 	d, err := loadfile(sites)

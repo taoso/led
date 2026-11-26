@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/taoso/led/pay"
+	"github.com/smartwalle/alipay/v3"
 	"golang.org/x/net/idna"
 )
 
@@ -15,7 +15,7 @@ import (
 type LED struct {
 	sites map[string]*FileHandler
 
-	Alipay *pay.Alipay
+	alipay *alipay.Client
 
 	Root string
 }
