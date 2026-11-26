@@ -11,7 +11,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func (p *Proxy) Comment(host string, w http.ResponseWriter, req *http.Request) {
+func (p *LED) Comment(host string, w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))

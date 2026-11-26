@@ -25,7 +25,7 @@ type alipayOrderArgs struct {
 	NotifyURL string `json:"notify_url,omitempty"` // 异步通知地址
 }
 
-func (p *Proxy) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+func (p *LED) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	defer req.Body.Close()
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -98,7 +98,7 @@ func (p *Proxy) AlipayOrderCreate(w http.ResponseWriter, req *http.Request, f *F
 	})
 }
 
-func (p *Proxy) AlipayOrderNotify(w http.ResponseWriter, req *http.Request, f *FileHandler) {
+func (p *LED) AlipayOrderNotify(w http.ResponseWriter, req *http.Request, f *FileHandler) {
 	trade, err := p.Alipay.GetNotification(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

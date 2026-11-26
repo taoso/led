@@ -8,9 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/taoso/led"
@@ -42,26 +40,16 @@ func main() {
 		panic(err)
 	}
 
-	proxy := &led.Proxy{
+	svr := &led.LED{
 		Root: root,
 	}
 
-	if err := load(proxy); err != nil {
+	if err := load(svr); err != nil {
 		panic(err)
 	}
 
-	sg := make(chan os.Signal, 3)
-	signal.Notify(sg, syscall.SIGHUP)
-	go func() {
-		for range sg {
-			if err := load(proxy); err != nil {
-				log.Println("load err:", err)
-			}
-		}
-	}()
-
 	s := &http.Server{
-		Handler:     proxy,
+		Handler:     svr,
 		IdleTimeout: 30 * time.Second,
 	}
 
@@ -69,7 +57,7 @@ func main() {
 	log.Fatal(s.Serve(lnH1))
 }
 
-func load(proxy *led.Proxy) error {
+func load(proxy *led.LED) error {
 	if id := os.Getenv("ALIPAY_APP_ID"); id != "" {
 		proxy.Alipay = pay.New(
 			id,
@@ -109,5 +97,10 @@ func loadfile(path string) (map[string]string, error) {
 		host := l[:i]
 		kv[host] = l[i+1:]
 	}
+
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+
 	return kv, nil
 }

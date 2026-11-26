@@ -11,8 +11,8 @@ import (
 	"golang.org/x/net/idna"
 )
 
-// Proxy serves static sites published under the root dir
-type Proxy struct {
+// LED serves static sites published under the root dir
+type LED struct {
 	sites map[string]*FileHandler
 
 	Alipay *pay.Alipay
@@ -20,7 +20,7 @@ type Proxy struct {
 	Root string
 }
 
-func (p *Proxy) SetSites(sites map[string]string) {
+func (p *LED) SetSites(sites map[string]string) {
 	hs := make(map[string]*FileHandler, len(sites))
 	for name := range sites {
 		hs[name] = NewHandler(p.Root, name)
@@ -29,12 +29,12 @@ func (p *Proxy) SetSites(sites map[string]string) {
 	p.sites = hs
 }
 
-func (p *Proxy) MySite(name string) bool {
+func (p *LED) MySite(name string) bool {
 	_, ok := p.sites[name]
 	return ok
 }
 
-func (p *Proxy) host(host string) string {
+func (p *LED) host(host string) string {
 	if i := strings.Index(host, ":"); i > 0 {
 		host = host[:i]
 	}
@@ -53,7 +53,7 @@ func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
 	w.WriteHeader(http.StatusMovedPermanently)
 }
 
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (p *LED) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 	if u, err := url.Parse(origin); err == nil {
 		if p.MySite(p.host(u.Host)) {
@@ -68,7 +68,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	p.serveLocal(w, req)
 }
 
-func (p *Proxy) serveLocal(w http.ResponseWriter, req *http.Request) {
+func (p *LED) serveLocal(w http.ResponseWriter, req *http.Request) {
 	host := p.host(req.Host)
 
 	if f := p.sites[host]; f != nil {
