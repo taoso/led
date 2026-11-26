@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/smartwalle/alipay/v3"
+	"github.com/stripe/stripe-go/v87"
 	"golang.org/x/net/idna"
 )
 
@@ -19,6 +20,10 @@ type LED struct {
 	once   sync.Once
 	sites  sync.Map // host -> *FileHandler
 	alipay *alipay.Client
+
+	stripe    *stripe.Client
+	whsec     string // stripe webhook signing secret
+	donations *DonationRepo
 }
 
 // site returns the handler serving that host, creating it on first use.
@@ -82,6 +87,9 @@ func (p *LED) routes() http.Handler {
 	mux.HandleFunc("POST /+/push", func(w http.ResponseWriter, req *http.Request) {
 		p.siteOf(req).webPush(w, req)
 	})
+	mux.HandleFunc("POST /+/stripe-donate", p.StripeDonate)
+	mux.HandleFunc("POST /+/stripe-webhook", p.StripeWebhook)
+	mux.HandleFunc("GET /+/stripe-donations", p.StripeDonations)
 	mux.HandleFunc("/", p.static)
 
 	return mux

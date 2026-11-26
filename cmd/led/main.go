@@ -40,6 +40,17 @@ func main() {
 		}
 	}
 
+	if secret := os.Getenv("STRIPE_SECRET"); secret != "" {
+		err := svr.SetStripe(
+			secret,
+			os.Getenv("STRIPE_WEBHOOK_SECRET"),
+			os.Getenv("DB_PATH"),
+		)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	s := &http.Server{Handler: svr}
 
 	log.Println("listening on", lnH1.Addr())
